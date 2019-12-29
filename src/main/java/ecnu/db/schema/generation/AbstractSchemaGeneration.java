@@ -4,11 +4,12 @@ import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.schema.Schema;
 import ecnu.db.schema.column.*;
 import ecnu.db.utils.ConfigConvert;
+import ecnu.db.utils.TouchstoneToolChainException;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,51 +31,42 @@ public abstract class AbstractSchemaGeneration {
      */
     abstract HashMap<String, String> getColumnInfo(String[] columnSqls);
 
-    /**
-     * @param keysInfoSql keys sql
-     * @return all the primary keys and foreign keys info
-     * If there is not foreign keys info in the sql, the arg is null.
-     */
-    abstract Pair<ArrayList<String>, HashMap<String, String>> getPrimaryKeyAndForeignKey(String keysInfoSql);
-
-    public Schema generateSchema(String tableName, String sql) throws Exception {
+    public Schema generateSchemaNoKeys(String tableName, String sql) throws TouchstoneToolChainException {
         Pair<String[], String> columnSqlAndKeySql = getColumnSqlAndKeySql(sql);
-        Pair<ArrayList<String>, HashMap<String, String>> primaryKeyAndForeignKey =
-                getPrimaryKeyAndForeignKey(columnSqlAndKeySql.getRight());
-        ArrayList<AbstractColumn> columns = getColumns(getColumnInfo(columnSqlAndKeySql.getLeft()));
-        return new Schema(tableName, primaryKeyAndForeignKey.getLeft(), primaryKeyAndForeignKey.getRight(), columns);
+        HashMap<String, AbstractColumn> columns = getColumns(getColumnInfo(columnSqlAndKeySql.getLeft()));
+        return new Schema(tableName, columns);
     }
 
-    private ArrayList<AbstractColumn> getColumns(HashMap<String, String> columnNameAndTypes) throws Exception {
-        ArrayList<AbstractColumn> columns = new ArrayList<>();
+    private HashMap<String, AbstractColumn> getColumns(HashMap<String, String> columnNameAndTypes) throws TouchstoneToolChainException {
+        HashMap<String, AbstractColumn> columns = new HashMap<>();
         for (Map.Entry<String, String> columnNameAndType : columnNameAndTypes.entrySet()) {
             switch (ConfigConvert.getColumnType(columnNameAndType.getValue())) {
-                case Int:
-                    columns.add(new IntColumn(columnNameAndType.getKey()));
+                case INTEGER:
+                    columns.put(columnNameAndType.getKey(), new IntColumn(columnNameAndType.getKey()));
                     break;
-                case Bool:
-                    columns.add(new BoolColumn(columnNameAndType.getKey()));
+                case BOOL:
+                    columns.put(columnNameAndType.getKey(), new BoolColumn(columnNameAndType.getKey()));
                     break;
-                case Decimal:
-                    columns.add(new DecimalColumn(columnNameAndType.getKey()));
+                case DECIMAL:
+                    columns.put(columnNameAndType.getKey(), new DecimalColumn(columnNameAndType.getKey()));
                     break;
-                case String:
-                    columns.add(new StringColumn(columnNameAndType.getKey()));
+                case VARCHAR:
+                    columns.put(columnNameAndType.getKey(), new StringColumn(columnNameAndType.getKey()));
                     break;
-                case Date:
-                    columns.add(new DateColumn(columnNameAndType.getKey()));
+                case DATETIME:
+                    columns.put(columnNameAndType.getKey(), new DateColumn(columnNameAndType.getKey()));
                     break;
                 default:
-                    throw new Exception("没有实现的类型转换");
+                    throw new TouchstoneToolChainException("没有实现的类型转换");
             }
         }
         return columns;
     }
 
 
-    public abstract String getColumnDistributionSql(ArrayList<AbstractColumn> columns) throws Exception;
+    public abstract String getColumnDistributionSql(Collection<AbstractColumn> columns) throws TouchstoneToolChainException;
 
-    public abstract void setDataRangeBySqlResult(ArrayList<AbstractColumn> columns, String[] sqlResult) throws Exception;
+    public abstract void setDataRangeBySqlResult(Collection<AbstractColumn> columns, String[] sqlResult) throws TouchstoneToolChainException;
 
     public abstract void setDataRangeUnique(Schema schema, AbstractDbConnector dbConnector) throws IOException, SQLException;
 }

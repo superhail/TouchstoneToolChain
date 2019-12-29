@@ -5,7 +5,7 @@ public class DecimalColumn extends AbstractColumn {
     double max;
 
     public DecimalColumn(String columnName) {
-        super(columnName, ColumnType.Decimal);
+        super(columnName, ColumnType.DECIMAL);
     }
 
     public void setMin(double min) {
@@ -17,7 +17,12 @@ public class DecimalColumn extends AbstractColumn {
     }
 
     @Override
+    public int getNdv() {
+        return -1;
+    }
+
+    @Override
     public String formatDataDistribution() {
-        return columnName + ";" + nullPercentage + ',' + min + ',' + max;
+        return columnName + ";" + nullPercentage + ';' + min + ';' + max;
     }
 }

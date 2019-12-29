@@ -6,7 +6,7 @@ public class IntColumn extends AbstractColumn {
     private int ndv;
 
     public IntColumn(String columnName) {
-        super(columnName, ColumnType.Int);
+        super(columnName, ColumnType.INTEGER);
     }
 
     public void setMin(int min) {
@@ -15,6 +15,11 @@ public class IntColumn extends AbstractColumn {
 
     public void setMax(int max) {
         this.max = max;
+    }
+
+    @Override
+    public int getNdv() {
+        return -1;
     }
 
     public void setNdv(int ndv) {

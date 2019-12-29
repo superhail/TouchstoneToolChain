@@ -1,11 +1,8 @@
-package ecnu.db.query;
+package ecnu.db.query.analyzer;
 
 
 public class ExecutionNode {
 
-    ExecutionNodeType type;
-    int outputRows;
-    String info;
     /**
      * 指向左节点
      */
@@ -14,10 +11,41 @@ public class ExecutionNode {
      * 指向左节点
      */
     ExecutionNode leftNode;
+    private ExecutionNodeType type;
+    private int outputRows;
+    private String info;
+    private boolean valueOutputted;
+    private boolean pkOutputted;
+    private int joinTag;
 
     public ExecutionNode(ExecutionNodeType type, int outputRows) {
         this.type = type;
         this.outputRows = outputRows;
+        joinTag = -1;
+    }
+
+    public int getJoinTag() {
+        return joinTag;
+    }
+
+    public void setJoinTag(int joinTag) {
+        this.joinTag = joinTag;
+    }
+
+    public boolean isValueOutputted() {
+        return valueOutputted;
+    }
+
+    public void setOutputted() {
+        this.valueOutputted = true;
+    }
+
+    public boolean isPkOutputted() {
+        return pkOutputted;
+    }
+
+    public void setPkOutputted() {
+        this.pkOutputted = true;
     }
 
     public String getInfo() {
@@ -42,6 +70,14 @@ public class ExecutionNode {
 
     public void setLeftNode(ExecutionNode leftNode) {
         this.leftNode = leftNode;
+    }
+
+    public int getOutputRows() {
+        return outputRows;
+    }
+
+    public void setOutputRows(int outputRows) {
+        this.outputRows = outputRows;
     }
 
     public ExecutionNodeType getType() {

@@ -1,6 +1,7 @@
 package ecnu.db.dbconnector;
 
 import ecnu.db.utils.SystemConfig;
+import ecnu.db.utils.TouchstoneToolChainException;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -13,7 +14,7 @@ import java.sql.SQLException;
 public class TidbConnector extends AbstractDbConnector {
     String statsUrl;
 
-    public TidbConnector(SystemConfig config) {
+    public TidbConnector(SystemConfig config) throws TouchstoneToolChainException {
         super(config);
         statsUrl = "http://" + config.getDatabaseIp() + ':' +
                 config.getTidbHttpPort() + "/stats/dump/" + config.getDatabaseName() + "/";
@@ -37,12 +38,6 @@ public class TidbConnector extends AbstractDbConnector {
     String abstractGetCreateTableSql(String tableName) {
         return "show create table " + tableName;
     }
-
-    @Override
-    String abstractExplainQuery(String sql) {
-        return "explain analyze " + sql;
-    }
-
 
     public String tableInfoJson(String tableName) throws IOException, SQLException {
         stmt.executeQuery("analyze table " + tableName);

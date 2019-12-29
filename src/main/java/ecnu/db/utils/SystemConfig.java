@@ -16,9 +16,14 @@ public class SystemConfig {
     private String databaseUser;
     private String databasePwd;
     private String databaseName;
+
+    private String resultDirectory;
+
     private String tidbHttpPort;
     private String databaseVersion;
-    private HashMap<HashSet<String>, ColumnType> typeConvert;
+    private String sqlsDirectory;
+    private HashMap<ColumnType, HashSet<String>> typeConvert;
+    private HashMap<String, String> tidbSelectArgs;
 
     public SystemConfig() {
         databaseIp = "127.0.0.1";
@@ -40,6 +45,30 @@ public class SystemConfig {
         return systemConfig;
     }
 
+    public String getResultDirectory() {
+        return resultDirectory;
+    }
+
+    public void setResultDirectory(String resultDirectory) {
+        this.resultDirectory = resultDirectory;
+    }
+
+    public String getSqlsDirectory() {
+        return sqlsDirectory;
+    }
+
+    public void setSqlsDirectory(String sqlsDirectory) {
+        this.sqlsDirectory = sqlsDirectory;
+    }
+
+    public HashMap<String, String> getTidbSelectArgs() {
+        return tidbSelectArgs;
+    }
+
+    public void setTidbSelectArgs(HashMap<String, String> tidbSelectArgs) {
+        this.tidbSelectArgs = tidbSelectArgs;
+    }
+
     public String getDatabaseVersion() {
         return databaseVersion;
     }
@@ -56,16 +85,16 @@ public class SystemConfig {
         this.tidbHttpPort = tidbHttpPort;
     }
 
-    public HashMap<HashSet<String>, ColumnType> getTypeConvert() {
+    public HashMap<ColumnType, HashSet<String>> getTypeConvert() {
         return typeConvert;
     }
 
-    public void setTypeConvert(HashMap<HashSet<String>, ColumnType> typeConvert) {
+    public void setTypeConvert(HashMap<ColumnType, HashSet<String>> typeConvert) {
         this.typeConvert = typeConvert;
     }
 
     public ColumnType getColumnType(String readType) {
-        return ColumnType.Int;
+        return ColumnType.INTEGER;
     }
 
     public String getDatabaseIp() {

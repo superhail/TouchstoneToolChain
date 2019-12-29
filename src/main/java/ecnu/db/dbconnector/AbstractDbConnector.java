@@ -1,6 +1,7 @@
 package ecnu.db.dbconnector;
 
 import ecnu.db.utils.SystemConfig;
+import ecnu.db.utils.TouchstoneToolChainException;
 
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -18,16 +19,20 @@ public abstract class AbstractDbConnector {
      */
     protected Statement stmt;
 
-    AbstractDbConnector(SystemConfig config) {
+    AbstractDbConnector(SystemConfig config) throws TouchstoneToolChainException {
         // 数据库的用户名与密码
         String user = config.getDatabaseUser();
         String pass = config.getDatabasePwd();
         try {
+            try {
+                Class.forName("com.mysql.cj.jdbc.Driver");
+            } catch (ClassNotFoundException e) {
+                e.printStackTrace();
+            }
             stmt = DriverManager.getConnection(dbUrl(config), user, pass).createStatement();
         } catch (SQLException e) {
-            System.out.println(dbUrl(config));
-            System.out.println("无法建立数据库连接");
-            System.exit(-1);
+            e.printStackTrace();
+            throw new TouchstoneToolChainException(dbUrl(config) + "无法建立数据库连接");
         }
     }
 
@@ -37,7 +42,6 @@ public abstract class AbstractDbConnector {
 
     abstract String abstractGetCreateTableSql(String tableName);
 
-    abstract String abstractExplainQuery(String sql);
 
     //数据库标准操作
     public ArrayList<String> getTableNames() throws SQLException {
@@ -67,7 +71,7 @@ public abstract class AbstractDbConnector {
     }
 
     public ArrayList<String[]> explainQuery(String sql, String[] sqlInfoColumns) throws SQLException {
-        ResultSet rs = stmt.executeQuery(abstractExplainQuery(sql));
+        ResultSet rs = stmt.executeQuery("explain analyze " + sql);
         ArrayList<String[]> result = new ArrayList<>();
         while (rs.next()) {
             String[] infos = new String[sqlInfoColumns.length];
@@ -78,5 +82,12 @@ public abstract class AbstractDbConnector {
         }
         return result;
     }
+
+    public int getMultiColumnsNdv(String schema, String columns) throws SQLException {
+        ResultSet rs = stmt.executeQuery("select count(distinct " + columns + ") from " + schema);
+        rs.next();
+        return rs.getInt(1);
+    }
+
 
 }

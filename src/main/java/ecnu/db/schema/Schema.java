@@ -1,7 +1,10 @@
 package ecnu.db.schema;
 
 import ecnu.db.schema.column.AbstractColumn;
+import ecnu.db.schema.column.ColumnType;
+import ecnu.db.utils.TouchstoneToolChainException;
 
+import java.text.ParseException;
 import java.util.*;
 
 /**
@@ -10,21 +13,18 @@ import java.util.*;
 public class Schema {
     private String tableName;
     private int tableSize;
-    private ArrayList<String> primaryKeys;
+    private String primaryKeys;
     private HashMap<String, String> foreignKeys;
-    private ArrayList<AbstractColumn> columns;
-    private HashSet<String> columnNames;
+    private HashMap<String, AbstractColumn> columns;
 
+    private int joinTag;
+    private int lastJoinTag;
 
-    public Schema(String tableName, ArrayList<String> primaryKeys, HashMap<String, String> foreignKeys, ArrayList<AbstractColumn> columns) {
+    public Schema(String tableName, HashMap<String, AbstractColumn> columns) {
         this.tableName = tableName;
-        this.primaryKeys = primaryKeys;
-        this.foreignKeys = foreignKeys;
         this.columns = columns;
-        this.columnNames = new HashSet<>();
-        for (AbstractColumn column : columns) {
-            columnNames.add(column.getColumnName());
-        }
+        joinTag = 1;
+        lastJoinTag = 1;
     }
 
     /**
@@ -49,18 +49,58 @@ public class Schema {
         return true;
     }
 
-    public void addForeignKey(String columnName, String referencingTableInfo) throws Exception {
+    public HashMap<String, AbstractColumn> getColumns() {
+        return columns;
+    }
+
+    public int getJoinTag() {
+        int temp = joinTag;
+        joinTag *= 4;
+        return temp;
+    }
+
+    public void keepJoinTag(boolean keep) {
+        if (keep) {
+            lastJoinTag = joinTag;
+        } else {
+            joinTag = lastJoinTag;
+        }
+    }
+
+    public void addForeignKey(String localColumnName, String referencingTable, String referencingInfo) throws TouchstoneToolChainException {
         if (foreignKeys == null) {
             foreignKeys = new HashMap<>();
         }
-        if (foreignKeys.containsKey(columnName)) {
-            if (!referencingTableInfo.equals(foreignKeys.get(columnName))) {
-                throw new Exception("冲突的主外键连接");
+        String[] columnNames = localColumnName.split(",");
+        String[] refColumnNames = referencingInfo.split(",");
+        for (int i = 0; i < columnNames.length; i++) {
+            if (foreignKeys.containsKey(columnNames[i])) {
+                if (!(referencingTable + "." + refColumnNames[i]).equals(foreignKeys.get(columnNames[i]))) {
+                    throw new TouchstoneToolChainException("冲突的主外键连接");
+                } else {
+                    return;
+                }
+            }
+            foreignKeys.put(columnNames[i], referencingTable + "." + refColumnNames[i]);
+        }
+
+    }
+
+    public void setPrimaryKeys(String primaryKeys) throws TouchstoneToolChainException {
+        if (this.primaryKeys == null) {
+            this.primaryKeys = primaryKeys;
+        } else {
+            HashSet<String> newKeys = new HashSet<>(Arrays.asList(primaryKeys.split(",")));
+            HashSet<String> keys = new HashSet<>(Arrays.asList(this.primaryKeys.split(",")));
+            if (keys.size() == newKeys.size()) {
+                keys.removeAll(newKeys);
+                if (keys.size() > 0) {
+                    throw new TouchstoneToolChainException("query中使用了多列主键的部分主键");
+                }
             } else {
-                return;
+                throw new TouchstoneToolChainException("query中使用了多列主键的部分主键");
             }
         }
-        foreignKeys.put(columnName, referencingTableInfo);
     }
 
     /**
@@ -80,33 +120,17 @@ public class Schema {
         return true;
     }
 
-    public boolean isColumn(String name) {
-        return columnNames.contains(name);
-    }
-
-    public boolean isPrimaryKey(String name) {
-        return primaryKeys.contains(name);
-    }
-
-    public int getPrimaryKeySize(){
-        return primaryKeys.size();
-    }
-
-
-    /**
-     * 获取既不是主键也不是外键的列
-     *
-     * @return 满足要求的列
-     */
-    public ArrayList<AbstractColumn> getNotKeyColumns() {
-        ArrayList<AbstractColumn> results = new ArrayList<>();
-        for (AbstractColumn column : columns) {
-            if (!primaryKeys.contains(column.getColumnName()) && !foreignKeys.containsKey(column.getColumnName())) {
-                results.add(column);
-            }
+    public int getNdv(String columnName) throws TouchstoneToolChainException {
+        if (!columns.containsKey(columnName)) {
+            throw new TouchstoneToolChainException("不存在的列");
         }
-        return results;
+        return columns.get(columnName).getNdv();
     }
+
+    public Collection<AbstractColumn> getAllColumns() {
+        return columns.values();
+    }
+
 
     /**
      * 格式化返回schema信息
@@ -114,22 +138,58 @@ public class Schema {
      * @return 返回满足touchstone格式的schema信息
      */
     public String formatSchemaInfo() {
-        StringBuilder schemaInfo = new StringBuilder("T[" + tableName + ';' + tableSize + ';');
-        for (AbstractColumn column : columns) {
-            schemaInfo.append(column.formatColumnType());
+        if (primaryKeys == null && foreignKeys == null) {
+            return null;
         }
-        schemaInfo.append("P(");
-        for (String primaryKey : primaryKeys) {
-            schemaInfo.append(primaryKey).append(',');
+        int k = 1;
+        if (tableSize < 100) {
+            k = 100;
         }
-        schemaInfo.replace(schemaInfo.length() - 1, schemaInfo.length() - 1, ");");
+        StringBuilder schemaInfo = new StringBuilder("T[" + tableName + ';' + tableSize * k + ';');
+        List<String> hasProduct = new ArrayList<>();
+        for (AbstractColumn column : columns.values()) {
+            if (primaryKeys != null) {
+                if (primaryKeys.contains(column.getColumnName())) {
+                    schemaInfo.append(column.formatColumnType());
+                    hasProduct.add(column.getColumnName());
+                }
+            }
+        }
+
+        for (AbstractColumn column : columns.values()) {
+            if (!hasProduct.contains(column.getColumnName())) {
+                if (foreignKeys != null) {
+                    if (foreignKeys.containsKey(column.getColumnName())) {
+                        schemaInfo.append(column.formatColumnType());
+                        hasProduct.add(column.getColumnName());
+                    }
+                }
+            }
+        }
+
+        for (AbstractColumn column : columns.values()) {
+            if (!hasProduct.contains(column.getColumnName())) {
+                schemaInfo.append(column.formatColumnType());
+            }
+        }
+
+        if (primaryKeys != null) {
+            schemaInfo.append("P(").append(primaryKeys).append(");");
+        } else {
+            schemaInfo.append("P(");
+            for (String localKey : foreignKeys.keySet()) {
+                schemaInfo.append(localKey).append(",");
+            }
+            schemaInfo.replace(schemaInfo.length(), schemaInfo.length(), ");");
+        }
+
         if (foreignKeys != null) {
             for (Map.Entry<String, String> keyAndRefKey : foreignKeys.entrySet()) {
                 schemaInfo.append("F(").append(keyAndRefKey.getKey()).append(',').
                         append(keyAndRefKey.getValue()).append(");");
             }
         }
-        return schemaInfo.replace(schemaInfo.length() - 1, schemaInfo.length() - 1, "]").toString();
+        return schemaInfo.replace(schemaInfo.length() - 1, schemaInfo.length(), "]").toString();
     }
 
     /**
@@ -137,22 +197,40 @@ public class Schema {
      *
      * @return 返回满足touchstone格式的数据分布
      */
-    public String formatDataDistributionInfo() {
+    public String formatDataDistributionInfo() throws ParseException {
+        if (primaryKeys == null && foreignKeys == null) {
+            return null;
+        }
         StringBuilder dataDistributionInfo = new StringBuilder();
-        for (AbstractColumn column : columns) {
-            if (!primaryKeys.contains(column.getColumnName()) && !foreignKeys.containsKey(column.getColumnName())) {
-                continue;
+        for (AbstractColumn column : columns.values()) {
+            boolean skip = false;
+            if (primaryKeys != null && primaryKeys.contains(column.getColumnName())) {
+                skip = true;
             }
-            dataDistributionInfo.append("D[").append(tableName).append(".").append(column.formatDataDistribution()).append("]\n");
+            if (foreignKeys != null && foreignKeys.containsKey(column.getColumnName())) {
+                skip = true;
+            }
+            if (!skip) {
+                dataDistributionInfo.append("D[").append(tableName).append(".").
+                        append(column.formatDataDistribution()).append("]\n");
+            }
         }
         return dataDistributionInfo.toString();
     }
 
-    public void setTableSize(int tableSize) {
-        this.tableSize = tableSize;
+    public boolean isDate(String columnName) {
+        return columns.get(columnName).getColumnType() == ColumnType.DATETIME;
     }
 
     public String getTableName() {
         return tableName;
+    }
+
+    public int getTableSize() {
+        return tableSize;
+    }
+
+    public void setTableSize(int tableSize) {
+        this.tableSize = tableSize;
     }
 }

@@ -6,14 +6,14 @@ import ecnu.db.dbconnector.TidbConnector;
 import ecnu.db.schema.Schema;
 import ecnu.db.schema.column.*;
 import ecnu.db.utils.TidbStatsJsonObject;
+import ecnu.db.utils.TouchstoneToolChainException;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 
 /**
@@ -43,67 +43,53 @@ public class TidbSchemaGeneration extends AbstractSchemaGeneration {
         return columnInfos;
     }
 
-    /**
-     * Because there is not foreign keys info in tidb, so the value is always null.
-     *
-     * @param keysInfoSql keys sql
-     * @return primarykeys info
-     */
     @Override
-    Pair<ArrayList<String>, HashMap<String, String>> getPrimaryKeyAndForeignKey(String keysInfoSql) {
-        keysInfoSql = keysInfoSql.substring(keysInfoSql.indexOf("(") + 1, keysInfoSql.indexOf(")"));
-        ArrayList<String> keys = new ArrayList<>();
-        Collections.addAll(keys, keysInfoSql.split(","));
-        return new MutablePair<>(keys, null);
-    }
-
-    @Override
-    public String getColumnDistributionSql(ArrayList<AbstractColumn> columns) throws Exception {
+    public String getColumnDistributionSql(Collection<AbstractColumn> columns) throws TouchstoneToolChainException {
         StringBuilder sql = new StringBuilder();
         for (AbstractColumn column : columns) {
             switch (column.getColumnType()) {
-                case Date:
-                case Decimal:
-                case Int:
+                case DATETIME:
+                case DECIMAL:
+                case INTEGER:
                     sql.append("min(").append(column.getColumnName())
                             .append("),max(").append(column.getColumnName()).append("),");
                     break;
-                case String:
+                case VARCHAR:
                     sql.append("max(length(").append(column.getColumnName()).append(")),");
                     break;
-                case Bool:
+                case BOOL:
                     break;
                 default:
-                    throw new Exception("未匹配到的类型");
+                    throw new TouchstoneToolChainException("未匹配到的类型");
             }
         }
         return sql.toString().substring(0, sql.length() - 1);
     }
 
     @Override
-    public void setDataRangeBySqlResult(ArrayList<AbstractColumn> columns, String[] sqlResult) throws Exception {
+    public void setDataRangeBySqlResult(Collection<AbstractColumn> columns, String[] sqlResult) throws TouchstoneToolChainException {
         int index = 0;
         for (AbstractColumn column : columns) {
             switch (column.getColumnType()) {
-                case Int:
+                case INTEGER:
                     ((IntColumn) column).setMin(Integer.parseInt(sqlResult[index++]));
                     ((IntColumn) column).setMax(Integer.parseInt(sqlResult[index++]));
                     break;
-                case String:
+                case VARCHAR:
                     ((StringColumn) column).setMaxLength(Integer.parseInt(sqlResult[index++]));
                     break;
-                case Decimal:
+                case DECIMAL:
                     ((DecimalColumn) column).setMin(Double.parseDouble(sqlResult[index++]));
                     ((DecimalColumn) column).setMax(Double.parseDouble(sqlResult[index++]));
                     break;
-                case Date:
+                case DATETIME:
                     ((DateColumn) column).setBegin(sqlResult[index++]);
                     ((DateColumn) column).setEnd(sqlResult[index++]);
                     break;
-                case Bool:
+                case BOOL:
                     break;
                 default:
-                    throw new Exception("未匹配到的类型");
+                    throw new TouchstoneToolChainException("未匹配到的类型");
             }
         }
     }
@@ -115,11 +101,11 @@ public class TidbSchemaGeneration extends AbstractSchemaGeneration {
                 tableInfoJson(schema.getTableName()).
                 replace(" ", ""), TidbStatsJsonObject.class);
         schema.setTableSize(tidbStatsJsonObject.getCount());
-        for (AbstractColumn column : schema.getNotKeyColumns()) {
+        for (AbstractColumn column : schema.getAllColumns()) {
             column.setNullPercentage(tidbStatsJsonObject.getNullProbability(column.getColumnName()));
-            if (column.getColumnType() == ColumnType.Int) {
+            if (column.getColumnType() == ColumnType.INTEGER) {
                 ((IntColumn) column).setNdv(tidbStatsJsonObject.getNdv(column.getColumnName()));
-            } else if (column.getColumnType() == ColumnType.String) {
+            } else if (column.getColumnType() == ColumnType.VARCHAR) {
                 ((StringColumn) column).setNdv(tidbStatsJsonObject.getNdv(column.getColumnName()));
                 ((StringColumn) column).setAvgLength(tidbStatsJsonObject.getAvgLength(column.getColumnName()));
             }

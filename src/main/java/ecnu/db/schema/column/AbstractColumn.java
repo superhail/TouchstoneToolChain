@@ -1,6 +1,8 @@
 package ecnu.db.schema.column;
 
 
+import java.text.ParseException;
+
 public abstract class AbstractColumn {
     protected float nullPercentage;
     protected String columnName;
@@ -10,6 +12,8 @@ public abstract class AbstractColumn {
         this.columnName = columnName;
         this.columnType = columnType;
     }
+
+    public abstract int getNdv();
 
     public String getColumnName() {
         return columnName;
@@ -27,5 +31,5 @@ public abstract class AbstractColumn {
         return columnName + ',' + columnType + ';';
     }
 
-    public abstract String formatDataDistribution();
+    public abstract String formatDataDistribution() throws ParseException;
 }
