@@ -1,27 +1,39 @@
 {
-    "databaseIp": "biui.me",
-    "databaseName": "tpch",
-    "databasePort": "4000",
-    "databasePwd": "",
-    "databaseUser": "root",
-    "tidbHttpPort": "10080",
-    "databaseVersion":"tidb",
-    "typeConvert": {
-        [
-            "int"
-        ]: "Int",
-        [
-            "date"
-        ]: "Date",
-        [
-            "decimal"
-        ]: "Decimal",
-        [
-            "varchar",
-            "char"
-        ]: "String",
-        [
-            "bool"
-        ]: "Bool"
-    }
+  "databaseIp": "biui.me",
+  "databaseName": "tpch",
+  "databasePort": "4000",
+  "databasePwd": "",
+  "databaseUser": "root",
+  "databaseVersion": "tidb",
+  "sqlsDirectory": "conf/sqls",
+  "resultDirectory": "result",
+  "typeConvert": {
+    "INTEGER": [
+      "int"
+    ],
+    "DATETIME": [
+      "date"
+    ],
+    "DECIMAL": [
+      "decimal"
+    ],
+    "VARCHAR": [
+      "varchar",
+      "char"
+    ],
+    "BOOL": [
+      "bool"
+    ]
+  },
+  "tidbHttpPort": "10080",
+  "tidbSelectArgs": {
+    "LT": "<",
+    "GT": ">",
+    "LE": "<=",
+    "GE": ">=",
+    "EQ": "=",
+    "NE": "<>",
+    "LIKE": "like",
+    "IN": "in"
+  }
 }
