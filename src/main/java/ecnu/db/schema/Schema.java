@@ -11,11 +11,11 @@ import java.util.*;
  * @author wangqingshuai
  */
 public class Schema {
-    private String tableName;
+    private final String tableName;
     private int tableSize;
     private String primaryKeys;
     private HashMap<String, String> foreignKeys;
-    private HashMap<String, AbstractColumn> columns;
+    private final HashMap<String, AbstractColumn> columns;
 
     private int joinTag;
     private int lastJoinTag;
@@ -122,7 +122,7 @@ public class Schema {
 
     public int getNdv(String columnName) throws TouchstoneToolChainException {
         if (!columns.containsKey(columnName)) {
-            throw new TouchstoneToolChainException("不存在的列");
+            throw new TouchstoneToolChainException("不存在的列" + columnName);
         }
         return columns.get(columnName).getNdv();
     }

@@ -6,7 +6,7 @@ import java.text.ParseException;
 public abstract class AbstractColumn {
     protected float nullPercentage;
     protected String columnName;
-    private ColumnType columnType;
+    private final ColumnType columnType;
 
     public AbstractColumn(String columnName, ColumnType columnType) {
         this.columnName = columnName;

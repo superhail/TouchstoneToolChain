@@ -40,7 +40,7 @@ public class TidbConnector extends AbstractDbConnector {
     }
 
     public String tableInfoJson(String tableName) throws IOException, SQLException {
-        stmt.executeQuery("analyze table " + tableName);
+        //stmt.executeQuery("analyze table " + tableName);
         InputStream is = new URL(statsUrl + tableName).openStream();
         BufferedReader rd = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
         String line;

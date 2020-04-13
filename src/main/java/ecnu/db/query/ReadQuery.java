@@ -17,7 +17,7 @@ public class ReadQuery {
         while ((line = reader.readLine()) != null) {
             line = line.trim();
             if (line.length() > 0) {
-                if(!line.startsWith("--")){
+                if (!line.startsWith("--")) {
                     fileContents.append(line).append('\n');
                 }
             }

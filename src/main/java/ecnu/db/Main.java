@@ -134,7 +134,7 @@ public class Main {
             System.out.println("成功");
             System.out.print("获取表数据分布...");
             dbSchemaGeneration.setDataRangeBySqlResult(schema.getAllColumns(), dbConnector.getDataRange(tableName,
-                    dbSchemaGeneration.getColumnDistributionSql(schema.getAllColumns())));
+                    dbSchemaGeneration.getColumnDistributionSql(schema.getTableName(), schema.getAllColumns())));
             dbSchemaGeneration.setDataRangeUnique(schema, dbConnector);
             System.out.println("成功");
             schemas.put(tableName, schema);
@@ -155,20 +155,22 @@ public class Main {
                 int index = 0;
                 BufferedWriter sqlWriter = new BufferedWriter(new FileWriter(
                         new File(resultSqls.getPath() + "/" + sqlFile.getName())));
+                List<String[]> queryPlan = new ArrayList<>();
                 for (String sql : sqls) {
                     try {
                         System.out.print(sqlFile.getName() + "_" + index + "\t");
                         queryInfos.add("## " + sqlFile.getName() + "_" + index);
-                        ExecutionNode root = queryAnalyzer.getExecutionNodesRoot(queryAnalyzer.getQueryPlan(sql));
+                        queryPlan = queryAnalyzer.getQueryPlan(sql);
+                        ExecutionNode root = queryAnalyzer.getExecutionNodesRoot(queryPlan);
                         queryInfos.addAll(queryAnalyzer.outputNode(root));
                         System.out.println("获取成功");
                         queryAnalyzer.outputSuccess(true);
 
                         ArrayList<String> cannotFindArgs = new ArrayList<>();
                         ArrayList<String> conflictArgs = new ArrayList<>();
-                        boolean stop = true;
                         sql = changeSql(sql, queryAnalyzer.getArgsAndIndex(), cannotFindArgs, conflictArgs);
                         ArrayList<String> reproductArgs = new ArrayList<>();
+
                         for (String cannotFindArg : cannotFindArgs) {
                             if (cannotFindArg.contains(" bet")) {
                                 String[] indexInfos = queryAnalyzer.getArgsAndIndex().
@@ -221,6 +223,13 @@ public class Main {
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
                         System.out.println(e.getMessage());
+                        for (String[] strings : queryPlan) {
+                            for (String string : strings) {
+                                System.out.print(string + "\t");
+                            }
+                            System.out.println();
+                        }
+
                     }
                 }
             }

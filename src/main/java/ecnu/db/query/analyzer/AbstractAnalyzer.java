@@ -48,11 +48,11 @@ public abstract class AbstractAnalyzer {
 
     public abstract List<String> outputNode(ExecutionNode root) throws TouchstoneToolChainException, SQLException;
 
-    public void outputSuccess(boolean success){
-        if(success){
+    public void outputSuccess(boolean success) {
+        if (success) {
             lastArgIndex = sqlArgIndex;
-        }else {
-            sqlArgIndex=lastArgIndex;
+        } else {
+            sqlArgIndex = lastArgIndex;
         }
         for (Schema schema : schemas.values()) {
             schema.keepJoinTag(success);

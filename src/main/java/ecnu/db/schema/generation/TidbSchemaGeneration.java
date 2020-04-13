@@ -26,8 +26,14 @@ public class TidbSchemaGeneration extends AbstractSchemaGeneration {
         createTableSql = createTableSql.substring(createTableSql.indexOf("\n") + 1, createTableSql.lastIndexOf(")"));
         createTableSql = createTableSql.replaceAll("`", "");
         String[] sqls = createTableSql.split("\n");
-        String keysInfo = sqls[sqls.length - 1].trim();
-        return new MutablePair<>(Arrays.copyOfRange(sqls, 0, sqls.length - 1), keysInfo);
+        int index = sqls.length - 1;
+        for (; index >= 0; index--) {
+            if (!sqls[index].contains("key ")) {
+                break;
+            }
+        }
+        String keysInfo = null;
+        return new MutablePair<>(Arrays.copyOfRange(sqls, 0, index + 1), keysInfo);
     }
 
     @Override
@@ -44,18 +50,18 @@ public class TidbSchemaGeneration extends AbstractSchemaGeneration {
     }
 
     @Override
-    public String getColumnDistributionSql(Collection<AbstractColumn> columns) throws TouchstoneToolChainException {
+    public String getColumnDistributionSql(String tableName, Collection<AbstractColumn> columns) throws TouchstoneToolChainException {
         StringBuilder sql = new StringBuilder();
         for (AbstractColumn column : columns) {
             switch (column.getColumnType()) {
                 case DATETIME:
                 case DECIMAL:
                 case INTEGER:
-                    sql.append("min(").append(column.getColumnName())
-                            .append("),max(").append(column.getColumnName()).append("),");
+                    sql.append("min(").append(tableName).append(".").append(column.getColumnName())
+                            .append("),max(").append(tableName).append(".").append(column.getColumnName()).append("),");
                     break;
                 case VARCHAR:
-                    sql.append("max(length(").append(column.getColumnName()).append(")),");
+                    sql.append("max(length(").append(tableName).append(".").append(column.getColumnName()).append(")),");
                     break;
                 case BOOL:
                     break;

@@ -11,7 +11,7 @@ public class ExecutionNode {
      * 指向左节点
      */
     ExecutionNode leftNode;
-    private ExecutionNodeType type;
+    private final ExecutionNodeType type;
     private int outputRows;
     private String info;
     private boolean valueOutputted;

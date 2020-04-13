@@ -64,7 +64,7 @@ public abstract class AbstractSchemaGeneration {
     }
 
 
-    public abstract String getColumnDistributionSql(Collection<AbstractColumn> columns) throws TouchstoneToolChainException;
+    public abstract String getColumnDistributionSql(String tableName, Collection<AbstractColumn> columns) throws TouchstoneToolChainException;
 
     public abstract void setDataRangeBySqlResult(Collection<AbstractColumn> columns, String[] sqlResult) throws TouchstoneToolChainException;
 

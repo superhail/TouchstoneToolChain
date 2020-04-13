@@ -65,7 +65,11 @@ public abstract class AbstractDbConnector {
         rs.next();
         String[] infos = new String[rs.getMetaData().getColumnCount()];
         for (int i = 1; i <= rs.getMetaData().getColumnCount(); i++) {
-            infos[i - 1] = rs.getString(i).trim().toLowerCase();
+            try {
+                infos[i - 1] = rs.getString(i).trim().toLowerCase();
+            } catch (NullPointerException e) {
+                infos[i - 1] = "0";
+            }
         }
         return infos;
     }

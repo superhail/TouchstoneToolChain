@@ -29,6 +29,9 @@ public class TidbStatsJsonObject {
     }
 
     public BigDecimal getAvgLength(String name) {
+        if (count == 0) {
+            return new BigDecimal(0);
+        }
         BigDecimal totalSize = BigDecimal.valueOf(columns.get(name).tot_col_size);
         BigDecimal tableSize = BigDecimal.valueOf(count);
         return totalSize.divide(tableSize, 4, RoundingMode.HALF_UP).subtract(BigDecimal.valueOf(2));

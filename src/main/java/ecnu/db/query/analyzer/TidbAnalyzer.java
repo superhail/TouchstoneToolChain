@@ -104,18 +104,23 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                         nodes.peek().setLeftNode(executionNode);
                     }
                 } else {
-                    while (nodes.peek().getType() != ExecutionNodeType.join || nodes.peek().getRightNode() != null) {
-                        nodes.pop();
+                    try {
+                        while (nodes.peek().getType() != ExecutionNodeType.join || nodes.peek().getRightNode() != null) {
+                            nodes.pop();
+                        }
+                    } catch (EmptyStackException e) {
+                        e.printStackTrace();
                     }
                     nodes.peek().setRightNode(executionNode);
                 }
                 nodes.push(executionNode);
                 lastLevel = currentLevel;
-            } else {
-                if ("Projection".equals(nodeType)) {
-                    nodes.clear();
-                }
             }
+//            else {
+//                if ("Projection".equals(nodeType)) {
+//                    nodes.clear();
+//                }
+//            }
         }
 
         ExecutionNode root = nodes.get(0);
@@ -228,6 +233,8 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                     String[] joinColumnInfos = analyzeJoinInfo(node.getInfo());
                     if (!joinColumnInfos[0].equals(queryInfo.getTableName()) &&
                             !joinColumnInfos[2].equals(queryInfo.getTableName())) {
+                        System.out.println(node.getInfo());
+                        System.out.println(queryInfo.getTableName() + " " + joinColumnInfos[0] + " " + joinColumnInfos[2]);
                         queryInfo.setStop();
                     } else {
                         //将本表的信息放在前面
@@ -240,6 +247,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                             joinColumnInfos[3] = temp;
                         }
                         if (isPrimaryKey(joinColumnInfos)) {
+                            System.out.println(joinColumnInfos[0]);
                             node.setPkOutputted();
                             queryInfo.setStop();
                             if (!queryInfo.isFullTable()) {
@@ -256,6 +264,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                                 schemas.get(joinColumnInfos[0]).setPrimaryKeys(joinColumnInfos[1]);
                             }
                         } else {
+                            System.out.println("外键" + joinColumnInfos[0]);
                             node.setOutputted();
                             int pkCount = schemas.get(joinColumnInfos[2]).getTableSize();
                             if (pkCount != node.getRightNode().getOutputRows() && pkCount != node.getLeftNode().getOutputRows()) {
@@ -342,9 +351,10 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             if (eqCondition.groupCount() > 1) {
                 throw new UnsupportedOperationException();
             }
-            String[] eqInfos = eqCondition.group(0).substring(0, eqCondition.group(0).length() - 1).split("\\)");
+            String[] eqInfos = eqCondition.group(0).substring(0, eqCondition.group(0).length() - 1).split("eq\\(");
             boolean multiTables = false;
-            for (String eqInfo : eqInfos) {
+            for (int i = 1; i < eqInfos.length; i++) {
+                String eqInfo = eqInfos[i];
                 String[] joinInfos = eqInfo.split(",");
                 String[] leftJoinInfos = joinInfos[0].split("\\.");
                 String[] rightJoinInfos = joinInfos[1].split("\\.");
@@ -379,6 +389,12 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             } else {
                 throw new TouchstoneToolChainException("无法匹配的join格式" + joinInfo);
             }
+        }
+        if (result[1].contains(")")) {
+            result[1] = result[1].substring(0, result[1].indexOf(')'));
+        }
+        if (result[3].contains(")")) {
+            result[3] = result[3].substring(0, result[3].indexOf(')'));
         }
         return convertToDbTableName(result);
     }
@@ -415,6 +431,11 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                 operator = "not " + convertOperator(conditionInfos[1]);
                 String[] operatorInfo = conditionInfos[2].split(",");
                 columnName = operatorInfo[0].split("\\.")[2];
+                if ("not isnull".equals(operator)) {
+                    while (columnName.endsWith(")")) {
+                        columnName = columnName.substring(0, columnName.length() - 1);
+                    }
+                }
                 if (tableName == null) {
                     tableName = operatorInfo[0].split("\\.")[1];
                     if (aliasDic != null && aliasDic.containsKey(tableName)) {
@@ -434,6 +455,11 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                 operator = convertOperator(conditionInfos[0]);
                 String[] operatorInfo = conditionInfos[1].split(",");
                 columnName = operatorInfo[0].split("\\.")[2];
+                if ("isnull".equals(operator)) {
+                    while (columnName.endsWith(")")) {
+                        columnName = columnName.substring(0, columnName.length() - 1);
+                    }
+                }
                 if (tableName == null) {
                     tableName = operatorInfo[0].split("\\.")[1];
                     if (aliasDic != null && aliasDic.containsKey(tableName)) {
@@ -519,11 +545,16 @@ public class TidbAnalyzer extends AbstractAnalyzer {
      * @return 该查询树结构出的约束链
      */
     @Override
-    public List<String> outputNode(ExecutionNode root) throws TouchstoneToolChainException, SQLException {
+    public List<String> outputNode(ExecutionNode root) throws SQLException {
 
         List<String> queryInfos = new ArrayList<>();
         do {
-            QueryInfoState queryInfo = getQueryInfo(root);
+            QueryInfoState queryInfo = null;
+            try {
+                queryInfo = getQueryInfo(root);
+            } catch (TouchstoneToolChainException e) {
+                e.printStackTrace();
+            }
             if (queryInfo == null) {
                 break;
             } else {

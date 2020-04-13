@@ -30,10 +30,10 @@ public class DateColumn extends AbstractColumn {
 
     @Override
     public String formatDataDistribution() throws ParseException {
-        SimpleDateFormat touchstoneFmt=new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss");
+        SimpleDateFormat touchstoneFmt = new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss");
         String[] pattern = new String[]{"yyyy-MM", "yyyyMM", "yyyy/MM", "yyyyMMdd", "yyyy-MM-dd", "yyyy/MM/dd",
                 "yyyyMMddHHmmss", "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm:ss"};
-        return columnName + ";" + nullPercentage + ';' + touchstoneFmt.format(DateUtils.parseDate(begin, pattern))  + ";" +
+        return columnName + ";" + nullPercentage + ';' + touchstoneFmt.format(DateUtils.parseDate(begin, pattern)) + ";" +
                 touchstoneFmt.format(DateUtils.parseDate(end, pattern).getTime());
     }
 }
