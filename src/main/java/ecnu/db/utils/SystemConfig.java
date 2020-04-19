@@ -23,6 +23,7 @@ public class SystemConfig {
     private String sqlsDirectory;
     private HashMap<ColumnType, HashSet<String>> typeConvert;
     private HashMap<String, String> tidbSelectArgs;
+
     public SystemConfig() {
         databaseIp = "127.0.0.1";
         databaseUser = "root";

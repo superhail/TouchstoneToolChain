@@ -1,4 +1,4 @@
-package ecnu.db.query.analyzer.statical;
+package ecnu.db.analyzer.statical;
 
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLStatement;

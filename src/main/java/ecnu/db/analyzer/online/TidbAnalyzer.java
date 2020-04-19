@@ -1,15 +1,13 @@
-package ecnu.db.query.analyzer.online;
+package ecnu.db.analyzer.online;
 
 import com.alibaba.druid.util.JdbcConstants;
 import ecnu.db.dbconnector.AbstractDbConnector;
-import ecnu.db.query.analyzer.online.ExecutionNode.ExecutionNodeType;
-import ecnu.db.query.ccoutput.QueryInfoChain;
+import ecnu.db.analyzer.online.ExecutionNode.ExecutionNodeType;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.sql.SQLException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -130,121 +128,6 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         return nodes.get(0);
     }
 
-    /**
-     * 获取一条没有输出过的query约束链
-     *
-     * @param node 输入查询语法树的根节点
-     * @return 没有输出过的query约束链
-     */
-    private QueryInfoChain getQueryInfo(ExecutionNode node) throws TouchstoneToolChainException, SQLException {
-
-        // 如果已经输出过则直接返回
-        if (node == null || node.isVisited()) {
-            return null;
-        }
-
-        //获取来自子节点的query info
-        QueryInfoChain queryInfo = getQueryInfo(node.getLeftNode());
-        if (queryInfo == null) {
-            queryInfo = getQueryInfo(node.getRightNode());
-        }
-
-        // 如果没有获取到query info，则本身为filter节点或者scan节点
-        if (queryInfo == null) {
-            node.setVisited();
-            if (node.getType() == ExecutionNodeType.filter) {
-                Pair<String, String> tableNameAndSelectCondition = analyzeSelectCondition(node.getInfo());
-                String selectInfo = "[0," + tableNameAndSelectCondition.getRight() + "," +
-                        (double) node.getOutputRows() / schemas.get(tableNameAndSelectCondition.getLeft()).getTableSize() + "];";
-                return new QueryInfoChain(selectInfo, tableNameAndSelectCondition.getLeft(), node.getOutputRows());
-            } else if (node.getType() == ExecutionNodeType.scan) {
-                String tableName = node.getInfo().split(",")[0].substring(6).toLowerCase();
-                if (aliasDic != null && aliasDic.containsKey(tableName)) {
-                    tableName = aliasDic.get(tableName);
-                }
-                return new QueryInfoChain("", tableName, schemas.get(tableName).getTableSize());
-            } else {
-                throw new TouchstoneToolChainException("join节点的左右节点已经被访问过");
-            }
-        } else {
-            // 如果遍历结束，则不需要继续遍历
-            if (!queryInfo.isStop()) {
-                if (node.getType() == ExecutionNodeType.join) {
-                    String[] joinColumnInfos = analyzeJoinInfo(node.getInfo());
-                    //如果当前的join节点，不属于之前遍历的节点，则停止继续向上访问
-                    if (!joinColumnInfos[0].equals(queryInfo.getTableName())
-                            && !joinColumnInfos[2].equals(queryInfo.getTableName())) {
-                        System.out.println(node.getInfo());
-                        System.out.println(queryInfo.getTableName() + " " + joinColumnInfos[0] + " " + joinColumnInfos[2]);
-                        queryInfo.setStop();
-                    } else {
-                        //将本表的信息放在前面，交换位置
-                        if (queryInfo.getTableName().equals(joinColumnInfos[2])) {
-                            String temp = joinColumnInfos[0];
-                            joinColumnInfos[0] = joinColumnInfos[2];
-                            joinColumnInfos[2] = temp;
-                            temp = joinColumnInfos[1];
-                            joinColumnInfos[1] = joinColumnInfos[3];
-                            joinColumnInfos[3] = temp;
-                        }
-                        //根据主外键分别设置约束链输出信息
-                        if (isPrimaryKey(joinColumnInfos)) {
-                            queryInfo.setStop();
-                            if (node.getJoinTag() < 0) {
-                                node.setJoinTag(schemas.get(joinColumnInfos[0]).getJoinTag());
-                            }
-                            queryInfo.addQueryInfo("[1," + joinColumnInfos[1].replace(',', '#') + "," +
-                                    node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
-                            //设置主键
-                            schemas.get(joinColumnInfos[0]).setPrimaryKeys(joinColumnInfos[1]);
-                        } else {
-                            if (node.getJoinTag() < 0) {
-                                node.setJoinTag(schemas.get(joinColumnInfos[0]).getJoinTag());
-                            }
-                            String primaryKey = joinColumnInfos[2] + "." + joinColumnInfos[3];
-                            queryInfo.addQueryInfo("[2," + joinColumnInfos[1].replace(',', '#') + "," +
-                                    (double) node.getOutputRows() / queryInfo.getLastNodeLineCount() + "," +
-                                    primaryKey.replace(',', '#') + "," +
-                                    node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
-                            //设置外键
-                            schemas.get(joinColumnInfos[0]).addForeignKey(joinColumnInfos[1], joinColumnInfos[2], joinColumnInfos[3]);
-                            queryInfo.setLastNodeLineCount(node.getOutputRows());
-                        }
-                        if (node.getLeftNode().isVisited() && node.getRightNode().isVisited()) {
-                            node.setVisited();
-                        }
-                    }
-                } else {
-                    throw new TouchstoneToolChainException("出现了非join类型的树节点");
-                }
-            }
-            return queryInfo;
-        }
-    }
-
-    /**
-     * 根据输入的列名统计非重复值的个数，进而给出该列是否为主键
-     *
-     * @param columnInfos 输入的列名
-     * @return 该列是否为主键
-     */
-    private boolean isPrimaryKey(String[] columnInfos) throws TouchstoneToolChainException, SQLException {
-        if (!columnInfos[1].contains(",")) {
-            if (schemas.get(columnInfos[0]).getNdv(columnInfos[1]) == schemas.get(columnInfos[2]).getNdv(columnInfos[3])) {
-                return schemas.get(columnInfos[0]).getTableSize() < schemas.get(columnInfos[2]).getTableSize();
-            } else {
-                return schemas.get(columnInfos[0]).getNdv(columnInfos[1]) > schemas.get(columnInfos[2]).getNdv(columnInfos[3]);
-            }
-        } else {
-            int leftTableNdv = dbConnector.getMultiColumnsNdv(columnInfos[0], columnInfos[1]);
-            int rightTableNdv = dbConnector.getMultiColumnsNdv(columnInfos[2], columnInfos[3]);
-            if (leftTableNdv == rightTableNdv) {
-                return schemas.get(columnInfos[0]).getTableSize() < schemas.get(columnInfos[2]).getTableSize();
-            } else {
-                return leftTableNdv > rightTableNdv;
-            }
-        }
-    }
 
     /**
      * 分析join信息
@@ -253,6 +136,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
      * @return 长度为4的字符串数组，0，1为join info左侧的表名和列名，2，3为join右侧的表明和列名
      * @throws TouchstoneToolChainException 无法分析的join条件
      */
+    @Override
     public String[] analyzeJoinInfo(String joinInfo) throws TouchstoneToolChainException {
         if (joinInfo.contains("other cond:")) {
             throw new TouchstoneToolChainException("join中包含其他条件,暂不支持");
@@ -329,7 +213,8 @@ public class TidbAnalyzer extends AbstractAnalyzer {
      * @param selectCondition 传入的select条件语句
      * @return 表名和格式化后的condition
      */
-    private Pair<String, String> analyzeSelectCondition(String selectCondition) throws TouchstoneToolChainException {
+    @Override
+    Pair<String, String> analyzeSelectCondition(String selectCondition) throws TouchstoneToolChainException {
         String tableName = null;
         HashMap<String, String> conditionString = new HashMap<>();
         boolean useAlias = false;
@@ -447,37 +332,5 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         } else {
             throw new TouchstoneToolChainException("没有指定的operator转换：" + tidbOperator);
         }
-    }
-
-
-    /**
-     * 将查询树重构为约束链
-     *
-     * @param root 查询树的根
-     * @return 该查询树结构出的约束链
-     */
-    @Override
-    public List<String> outputNode(ExecutionNode root) throws SQLException {
-
-        List<String> queryInfos = new ArrayList<>();
-        do {
-            QueryInfoChain queryInfo = null;
-            try {
-                queryInfo = getQueryInfo(root);
-            } catch (TouchstoneToolChainException e) {
-                e.printStackTrace();
-            }
-            if (queryInfo == null) {
-                break;
-            } else {
-                if (!queryInfo.getQueryInfo().isBlank()) {
-                    String currentQueryInfo = "[" + queryInfo.getTableName() + "];" + queryInfo.getQueryInfo();
-                    System.out.println("chain：" + currentQueryInfo);
-                    queryInfos.add(currentQueryInfo);
-                }
-            }
-        } while (true);
-
-        return queryInfos;
     }
 }

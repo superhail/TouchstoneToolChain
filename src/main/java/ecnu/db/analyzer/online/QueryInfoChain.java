@@ -1,4 +1,4 @@
-package ecnu.db.query.ccoutput;
+package ecnu.db.analyzer.online;
 
 public class QueryInfoChain {
     String queryInfo;
@@ -12,13 +12,6 @@ public class QueryInfoChain {
         this.tableName = tableName;
         stop = false;
 
-    }
-
-    public QueryInfoChain() {
-        queryInfo = "";
-        tableName = "";
-        lastNodeLineCount = -1;
-        stop = true;
     }
 
     public String getTableName() {

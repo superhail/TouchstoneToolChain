@@ -1,4 +1,4 @@
-package ecnu.db.query.analyzer.online;
+package ecnu.db.analyzer.online;
 
 
 /**
@@ -33,6 +33,7 @@ public class ExecutionNode {
      * 记录主键的join tag，第一次访问该节点后设置join tag，后续的访问可以找到之前对应的join tag
      */
     private int joinTag = -1;
+
     public ExecutionNode(ExecutionNodeType type, int outputRows, String info) {
         this.type = type;
         this.outputRows = outputRows;

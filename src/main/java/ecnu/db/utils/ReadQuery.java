@@ -1,4 +1,4 @@
-package ecnu.db.query;
+package ecnu.db.utils;
 
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLStatement;
