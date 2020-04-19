@@ -5,9 +5,10 @@ import com.alibaba.druid.sql.SQLUtils;
 import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.dbconnector.TidbConnector;
 import ecnu.db.query.ReadQuery;
-import ecnu.db.query.analyzer.AbstractAnalyzer;
-import ecnu.db.query.analyzer.ExecutionNode;
-import ecnu.db.query.analyzer.TidbAnalyzer;
+import ecnu.db.query.analyzer.online.AbstractAnalyzer;
+import ecnu.db.query.analyzer.online.ExecutionNode;
+import ecnu.db.query.analyzer.online.TidbAnalyzer;
+import ecnu.db.query.analyzer.statical.QueryTableName;
 import ecnu.db.schema.Schema;
 import ecnu.db.schema.generation.AbstractSchemaGeneration;
 import ecnu.db.schema.generation.TidbSchemaGeneration;
@@ -119,12 +120,22 @@ public class Main {
         AbstractSchemaGeneration dbSchemaGeneration = new TidbSchemaGeneration();
 
         System.out.println("开始获取表名");
-        ArrayList<String> tableNames = dbConnector.getTableNames();
-        System.out.print("获取表名成功，表名为:");
-        for (String tableName : tableNames) {
-            System.out.print(tableName + " ");
+        ArrayList<String> tableNames;
+        if (systemConfig.isCrossMultiDatabase()) {
+            HashSet<String> tableNameSet = new HashSet<>();
+            for (File sqlFile : files) {
+                if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
+                    List<String> sqls = ReadQuery.getSQLsFromFile(sqlFile.getPath(), "mysql");
+                    for (String sql : sqls) {
+                        tableNameSet.addAll(QueryTableName.getTableName(sql, "mysql"));
+                    }
+                }
+            }
+            tableNames = new ArrayList<>(tableNameSet);
+        } else {
+            tableNames = dbConnector.getTableNames();
         }
-        System.out.println();
+        System.out.println("获取表名成功，表名为:" + tableNames);
         HashMap<String, Schema> schemas = new HashMap<>(tableNames.size());
         System.out.println("开始获取表结构和数据分布");
         for (String tableName : tableNames) {
@@ -158,10 +169,10 @@ public class Main {
                 List<String[]> queryPlan = new ArrayList<>();
                 for (String sql : sqls) {
                     try {
-                        System.out.print(sqlFile.getName() + "_" + index + "\t");
+                        System.out.println(sqlFile.getName() + "_" + index + "\t");
                         queryInfos.add("## " + sqlFile.getName() + "_" + index);
                         queryPlan = queryAnalyzer.getQueryPlan(sql);
-                        ExecutionNode root = queryAnalyzer.getExecutionNodesRoot(queryPlan);
+                        ExecutionNode root = queryAnalyzer.getExecutionTree(queryPlan);
                         queryInfos.addAll(queryAnalyzer.outputNode(root));
                         System.out.println("获取成功");
                         queryAnalyzer.outputSuccess(true);

@@ -16,15 +16,13 @@ public class SystemConfig {
     private String databaseUser;
     private String databasePwd;
     private String databaseName;
-
+    private boolean crossMultiDatabase;
     private String resultDirectory;
-
     private String tidbHttpPort;
     private String databaseVersion;
     private String sqlsDirectory;
     private HashMap<ColumnType, HashSet<String>> typeConvert;
     private HashMap<String, String> tidbSelectArgs;
-
     public SystemConfig() {
         databaseIp = "127.0.0.1";
         databaseUser = "root";
@@ -43,6 +41,14 @@ public class SystemConfig {
         SystemConfig systemConfig = JSON.parseObject(configJson.toString(), SystemConfig.class);
         ConfigConvert.setTypeConvert(systemConfig.getTypeConvert());
         return systemConfig;
+    }
+
+    public boolean isCrossMultiDatabase() {
+        return crossMultiDatabase;
+    }
+
+    public void setCrossMultiDatabase(boolean crossMultiDatabase) {
+        this.crossMultiDatabase = crossMultiDatabase;
     }
 
     public String getResultDirectory() {

@@ -4,9 +4,9 @@ package ecnu.db.schema.column;
 import java.text.ParseException;
 
 public abstract class AbstractColumn {
+    private final ColumnType columnType;
     protected float nullPercentage;
     protected String columnName;
-    private final ColumnType columnType;
 
     public AbstractColumn(String columnName, ColumnType columnType) {
         this.columnName = columnName;

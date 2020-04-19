@@ -1,14 +1,12 @@
 package ecnu.db.query.ccoutput;
 
-public class QueryInfoState {
+public class QueryInfoChain {
     String queryInfo;
     String tableName;
     int lastNodeLineCount;
     boolean stop;
-    boolean fullTable;
 
-    public QueryInfoState(String queryInfo, String tableName, int lastNodeLineCount, boolean fullTable) {
-        this.fullTable = fullTable;
+    public QueryInfoChain(String queryInfo, String tableName, int lastNodeLineCount) {
         this.queryInfo = queryInfo;
         this.lastNodeLineCount = lastNodeLineCount;
         this.tableName = tableName;
@@ -16,7 +14,7 @@ public class QueryInfoState {
 
     }
 
-    public QueryInfoState() {
+    public QueryInfoChain() {
         queryInfo = "";
         tableName = "";
         lastNodeLineCount = -1;
@@ -49,13 +47,5 @@ public class QueryInfoState {
 
     public void setStop() {
         this.stop = true;
-    }
-
-    public boolean isFullTable() {
-        return fullTable;
-    }
-
-    public void setFullTable() {
-        this.fullTable = false;
     }
 }

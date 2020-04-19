@@ -31,8 +31,8 @@ public abstract class AbstractDbConnector {
             }
             stmt = DriverManager.getConnection(dbUrl(config), user, pass).createStatement();
         } catch (SQLException e) {
-            e.printStackTrace();
-            throw new TouchstoneToolChainException(dbUrl(config) + "无法建立数据库连接");
+            System.out.println(e.getMessage());
+            throw new TouchstoneToolChainException("无法建立数据库连接,连接信息为\n" + dbUrl(config));
         }
     }
 

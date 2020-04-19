@@ -1,4 +1,4 @@
-package ecnu.db.query.analyzer;
+package ecnu.db.query.analyzer.statical;
 
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.statement.SQLExprTableSource;
@@ -33,7 +33,7 @@ public class QueryAliasParser {
         @Override
         public boolean visit(SQLExprTableSource x) {
             if (x.getAlias() != null) {
-                aliasMap.put(x.getAlias(), x.getName().getSimpleName());
+                aliasMap.put(x.getAlias().toLowerCase(), x.getName().toString().toLowerCase());
             }
             return true;
         }

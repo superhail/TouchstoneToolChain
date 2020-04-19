@@ -1,6 +1,6 @@
 {
-  "databaseIp": "biui.me",
-  "databaseName": "tpch",
+  "databaseIp": "127.0.0.1",
+  "crossMultiDatabase": true,
   "databasePort": "4000",
   "databasePwd": "",
   "databaseUser": "root",
@@ -12,14 +12,17 @@
       "int"
     ],
     "DATETIME": [
-      "date"
+      "date",
+      "datetime"
     ],
     "DECIMAL": [
-      "decimal"
+      "decimal",
+      "float"
     ],
     "VARCHAR": [
       "varchar",
-      "char"
+      "char",
+      "text"
     ],
     "BOOL": [
       "bool"
@@ -34,6 +37,7 @@
     "EQ": "=",
     "NE": "<>",
     "LIKE": "like",
-    "IN": "in"
+    "IN": "in",
+    "ISNULL": "isnull"
   }
 }

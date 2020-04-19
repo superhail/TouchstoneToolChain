@@ -5,9 +5,14 @@ import org.apache.commons.lang3.time.DateUtils;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.regex.Pattern;
 
 
 public class DateColumn extends AbstractColumn {
+    private final SimpleDateFormat touchstoneFmt = new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss");
+    private final String[] dataTimePattern = new String[]{"yyyy-MM", "yyyyMM", "yyyy/MM", "yyyyMMdd", "yyyy-MM-dd", "yyyy/MM/dd",
+            "yyyyMMddHHmmss", "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm:ss"};
+    private final Pattern pattern = Pattern.compile("-?\\d+(\\.\\d+)?");
     private String begin;
     private String end;
 
@@ -30,10 +35,21 @@ public class DateColumn extends AbstractColumn {
 
     @Override
     public String formatDataDistribution() throws ParseException {
-        SimpleDateFormat touchstoneFmt = new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss");
-        String[] pattern = new String[]{"yyyy-MM", "yyyyMM", "yyyy/MM", "yyyyMMdd", "yyyy-MM-dd", "yyyy/MM/dd",
-                "yyyyMMddHHmmss", "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm:ss"};
-        return columnName + ";" + nullPercentage + ';' + touchstoneFmt.format(DateUtils.parseDate(begin, pattern)) + ";" +
-                touchstoneFmt.format(DateUtils.parseDate(end, pattern).getTime());
+
+        if (isNumeric(begin)) {
+            return columnName + ";" + nullPercentage + ';' + touchstoneFmt.format(Long.parseLong(begin)) + ";" +
+                    touchstoneFmt.format(Long.parseLong(end));
+        } else {
+            return columnName + ";" + nullPercentage + ';' +
+                    touchstoneFmt.format(DateUtils.parseDate(begin, dataTimePattern)) + ";" +
+                    touchstoneFmt.format(DateUtils.parseDate(end, dataTimePattern).getTime());
+        }
+    }
+
+    private boolean isNumeric(String strNum) {
+        if (strNum == null) {
+            return false;
+        }
+        return pattern.matcher(strNum).matches();
     }
 }

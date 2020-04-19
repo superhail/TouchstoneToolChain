@@ -1,6 +1,7 @@
-package ecnu.db.query.analyzer;
+package ecnu.db.query.analyzer.online;
 
 import ecnu.db.dbconnector.AbstractDbConnector;
+import ecnu.db.query.analyzer.statical.QueryAliasParser;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
 
@@ -35,7 +36,7 @@ public abstract class AbstractAnalyzer {
      * @return 查询树Node信息
      * @throws TouchstoneToolChainException 查询树无法解析
      */
-    public abstract ExecutionNode getExecutionNodesRoot(List<String[]> queryPlan) throws TouchstoneToolChainException;
+    public abstract ExecutionNode getExecutionTree(List<String[]> queryPlan) throws TouchstoneToolChainException;
 
     public List<String[]> getQueryPlan(String sql) throws SQLException {
         aliasDic = queryAliasParser.getTableAlias(sql, getDbType());

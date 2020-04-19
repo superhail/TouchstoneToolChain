@@ -12,11 +12,10 @@ import java.util.*;
  */
 public class Schema {
     private final String tableName;
+    private final HashMap<String, AbstractColumn> columns;
     private int tableSize;
     private String primaryKeys;
     private HashMap<String, String> foreignKeys;
-    private final HashMap<String, AbstractColumn> columns;
-
     private int joinTag;
     private int lastJoinTag;
 
@@ -53,6 +52,9 @@ public class Schema {
         return columns;
     }
 
+    /**
+     * @return 当前表最新的join tag
+     */
     public int getJoinTag() {
         int temp = joinTag;
         joinTag *= 4;
