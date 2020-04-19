@@ -48,7 +48,9 @@ public class TidbConnector extends AbstractDbConnector {
     }
 
     public String tableInfoJson(String tableName) throws IOException {
-        InputStream is = new URL(statsUrl + tableName.replace(".", "/")).openStream();
+        String tableStatsUrl = statsUrl + tableName.replace(".", "/");
+        System.out.println(tableStatsUrl);
+        InputStream is = new URL(tableStatsUrl).openStream();
         BufferedReader rd = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
         String line;
         StringBuilder json = new StringBuilder();

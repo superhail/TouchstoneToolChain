@@ -1,8 +1,8 @@
 package ecnu.db.analyzer.online;
 
 import com.alibaba.druid.util.JdbcConstants;
-import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.analyzer.online.ExecutionNode.ExecutionNodeType;
+import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
 import org.apache.commons.lang3.tuple.MutablePair;
@@ -81,20 +81,14 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                 else if (filterNodeType.contains(nodeType)) {
                     executionNode = new ExecutionNode(ExecutionNodeType.filter, rowCount, subQueryPlan[1]);
                     //跳过下层的table scan
-                    i++;
+                    if (readerType.contains(queryPlan.get(i + 1)[0].split("─")[1].split("_")[0])) {
+                        i++;
+                    }
                 } else if (readerType.contains(nodeType)) {
                     //在树中维护下一层的信息
                     i++;
-                    //判断下一层是不是selection
-                    boolean isSelection = false;
-                    for (String filterKeyWord : filterNodeType) {
-                        if (queryPlan.get(i)[0].contains(filterKeyWord)) {
-                            isSelection = true;
-                            break;
-                        }
-                    }
-                    //如果下一层是selection, 则跳过下层的table scan操作
-                    if (isSelection) {
+                    //判断下一层是不是selection,如果下一层是selection, 则跳过下层的table scan操作
+                    if (filterNodeType.contains(queryPlan.get(i)[0].split("─")[1].split("_")[0])) {
                         executionNode = new ExecutionNode(ExecutionNodeType.filter, queryPlan.get(i++)[1]);
                     } else {
                         executionNode = new ExecutionNode(ExecutionNodeType.scan, queryPlan.get(i)[1]);

@@ -1,7 +1,7 @@
 package ecnu.db.analyzer.online;
 
-import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.analyzer.statical.QueryAliasParser;
+import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
 import org.apache.commons.lang3.tuple.Pair;
@@ -65,9 +65,7 @@ public abstract class AbstractAnalyzer {
                 break;
             } else {
                 if (!queryInfo.getQueryInfo().isBlank()) {
-                    String currentQueryInfo = "[" + queryInfo.getTableName() + "];" + queryInfo.getQueryInfo();
-                    System.out.println("chain：" + currentQueryInfo);
-                    queryInfos.add(currentQueryInfo);
+                    queryInfos.add("[" + queryInfo.getTableName() + "];" + queryInfo.getQueryInfo());
                 }
             }
         } while (true);
@@ -83,9 +81,23 @@ public abstract class AbstractAnalyzer {
      */
     private QueryInfoChain getQueryInfo(ExecutionNode node) throws TouchstoneToolChainException, SQLException {
 
-        // 如果已经输出过则直接返回
-        if (node == null || node.isVisited()) {
+        // 如果节点为空则直接返回
+        if (node == null) {
             return null;
+        }
+        // 如果节点为filter节点，且节点的子节点也已经被访问过则返回
+        if (node.getType() == ExecutionNode.ExecutionNodeType.filter) {
+            if (node.isVisited()) {
+                if (node.getLeftNode() == null || node.getLeftNode().isVisited()) {
+                    return null;
+                }
+            }
+        }
+        //如果节点为join节点，且已经被访问过，则直接返回
+        else {
+            if (node.isVisited()) {
+                return null;
+            }
         }
 
         //获取来自子节点的query info
@@ -152,6 +164,8 @@ public abstract class AbstractAnalyzer {
                                     primaryKey.replace(',', '#') + "," +
                                     node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
                             //设置外键
+                            System.out.println("table:" + joinColumnInfos[0] + ".column:" + joinColumnInfos[1] + " -ref- table:" +
+                                    joinColumnInfos[2] + ".column:" + joinColumnInfos[3]);
                             schemas.get(joinColumnInfos[0]).addForeignKey(joinColumnInfos[1], joinColumnInfos[2], joinColumnInfos[3]);
                             queryInfo.setLastNodeLineCount(node.getOutputRows());
                         }
@@ -160,7 +174,14 @@ public abstract class AbstractAnalyzer {
                         }
                     }
                 } else {
-                    throw new TouchstoneToolChainException("出现了非join类型的树节点");
+                    if (node.getType() == ExecutionNode.ExecutionNodeType.filter) {
+                        Pair<String, String> tableNameAndSelectCondition = analyzeSelectCondition(node.getInfo());
+                        if (queryInfo.getTableName().equals(tableNameAndSelectCondition.getKey())) {
+                            node.setVisited();
+                            queryInfo.addQueryInfo("[0," + tableNameAndSelectCondition.getRight() + "," +
+                                    (double) node.getOutputRows() / queryInfo.getLastNodeLineCount() + "];");
+                        }
+                    }
                 }
             }
             return queryInfo;
