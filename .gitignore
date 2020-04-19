@@ -28,3 +28,4 @@ TouchstoneToolchain.iml
 target
 result
 conf
+dependency-reduced-pom.xml
