@@ -2,16 +2,16 @@ package ecnu.db;
 
 
 import com.alibaba.druid.sql.SQLUtils;
-import ecnu.db.dbconnector.AbstractDbConnector;
-import ecnu.db.dbconnector.TidbConnector;
-import ecnu.db.utils.ReadQuery;
 import ecnu.db.analyzer.online.AbstractAnalyzer;
 import ecnu.db.analyzer.online.ExecutionNode;
 import ecnu.db.analyzer.online.TidbAnalyzer;
 import ecnu.db.analyzer.statical.QueryTableName;
+import ecnu.db.dbconnector.AbstractDbConnector;
+import ecnu.db.dbconnector.TidbConnector;
 import ecnu.db.schema.Schema;
 import ecnu.db.schema.generation.AbstractSchemaGeneration;
 import ecnu.db.schema.generation.TidbSchemaGeneration;
+import ecnu.db.utils.ReadQuery;
 import ecnu.db.utils.SystemConfig;
 import ecnu.db.utils.TouchstoneToolChainException;
 
