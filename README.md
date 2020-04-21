@@ -1,6 +1,6 @@
 # TouchstoneToolChain
 
-TouchstoneToolChain是一款数据库信息采集工具，负责收集数据库配置信息，生成符合[Touchtone](https://github.com/daseECNU/Touchstone)输入格式的配置文件，由 **华东师范大学数据科学与工程学院(DaSE@ECNU)** 维护。
+TouchstoneToolChain是一款数据库信息采集工具，负责收集数据库配置信息，生成符合[Touchtone](https://github.com/daseECNU/Touchstone)输入格式的配置文件，由**华东师范大学数据科学与工程学院(DaSE@ECNU)** 维护。
 
 当前支持数据库：
 
