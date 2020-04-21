@@ -42,10 +42,10 @@ TouchstoneToolChain采集完成后，会生成3部分配置文件
    该配置文件包含[Touchtone](https://github.com/daseECNU/Touchstone)需要的schema结构信息和数据分布的统计信息，但需要注意三点
 
    1. 工具只会输出待分析的query涉及到的table信息，没有涉及到的table不会出现配置文件中
-   2. 工具会尝试用query中的信息推测主外键信息，当出现环形依赖或者部分主键依赖，工具无法分析，由于[Touchtone](https://github.com/daseECNU/Touchstone)暂不支持这种schema结构
+   2. 工具会尝试用query中的信息推测主外键信息，当推测到环形依赖或者部分主键依赖时，工具无法分析，原因在于[Touchtone](https://github.com/daseECNU/Touchstone)暂不支持这种schema结构
    3. 当执行跨库分析任务时，table表名完全从query中采集，如果指定了查询库，则只会在本库中执行统计分析任务。
 
-2. `## 文件名_序号`.conf
+2. constraintsChain.conf
 
    该配置文件包含touchstone需要的约束链统计信息，使用`## 文件名_序号`来辨识分析结果中的sql语句，对于未能成功分析的sql，会保留`## 文件名_序号`的标识，但不会输出信息到文件中，同时会在程序执行中警示错误，方便后续的手动排查。
 
@@ -158,7 +158,7 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
 
 + 数据库信息。按照配置文件顺序主要需要配置的字段有，待采集数据库的ip，数据库name，数据库端口，密码和用户名。
 
-+ 数据库版本，无需配置。
++ 数据库版本。配置用于采集信息的数据库类型
 
 + 文件夹路径
 
