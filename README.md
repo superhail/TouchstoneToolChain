@@ -1,6 +1,6 @@
 # TouchstoneToolChain
 
-TouchstoneToolChain是一款数据库信息采集工具，负责收集数据库配置信息，生成符合[Touchtone](https://github.com/daseECNU/Touchstone)输入格式的配置文件，由**华东师范大学数据科学与工程学院（DaSE@ECNU）**维护。
+TouchstoneToolChain是一款数据库信息采集工具，负责收集数据库配置信息，生成符合[Touchtone](https://github.com/daseECNU/Touchstone)输入格式的配置文件，由**华东师范大学数据科学与工程学院（DaSE@ECNU**维护。
 
 当前支持数据库：
 
@@ -39,11 +39,11 @@ TouchstoneToolChain采集完成后，会生成3部分配置文件
 
 1. schema.conf
 
-   该配置文件包含[Touchtone](https://github.com/daseECNU/Touchstone)需要的schema结构信息和数据分布的统计信息，但需要注意两点
+   该配置文件包含[Touchtone](https://github.com/daseECNU/Touchstone)需要的schema结构信息和数据分布的统计信息，但需要注意三点
 
    1. 工具只会输出待分析的query涉及到的table信息，没有涉及到的table不会出现配置文件中
    2. 工具会尝试用query中的信息推测主外键信息，当出现环形依赖或者部分主键依赖，工具无法分析，由于[Touchtone](https://github.com/daseECNU/Touchstone)暂不支持这种schema结构
-   3. 当执行跨库分析任务时，table表名完全从query中采集，如果制定了查询库，则只会在本库中执行统计分析任务。
+   3. 当执行跨库分析任务时，table表名完全从query中采集，如果指定了查询库，则只会在本库中执行统计分析任务。
 
 2. `## 文件名_序号`.conf
 
@@ -199,4 +199,3 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
 
 - [ ] 暂且不支持UNION等集合操作
 - [ ] 当查询计划中出现isnull算子时，暂时无法判定来自数据库查询计划自动生成还是查询语句写入，需要手动配置。
-- [ ] 
