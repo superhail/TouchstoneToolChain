@@ -11,7 +11,6 @@ import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -69,7 +68,7 @@ public class TidbSchemaGeneration extends AbstractSchemaGeneration {
                     throw new TouchstoneToolChainException("未匹配到的类型");
             }
         }
-        return sql.toString().substring(0, sql.length() - 1);
+        return sql.substring(0, sql.length() - 1);
     }
 
     @Override
@@ -101,11 +100,9 @@ public class TidbSchemaGeneration extends AbstractSchemaGeneration {
     }
 
     @Override
-    public void setDataRangeUnique(Schema schema, AbstractDbConnector dbConnector)
-            throws IOException, SQLException {
+    public void setDataRangeUnique(Schema schema, AbstractDbConnector dbConnector) throws IOException {
         TidbStatsJsonObject tidbStatsJsonObject = JSON.parseObject(((TidbConnector) dbConnector).
-                tableInfoJson(schema.getTableName()).
-                replace(" ", ""), TidbStatsJsonObject.class);
+                tableInfoJson(schema.getTableName()).replace(" ", ""), TidbStatsJsonObject.class);
         schema.setTableSize(tidbStatsJsonObject.getCount());
         for (AbstractColumn column : schema.getAllColumns()) {
             column.setNullPercentage(tidbStatsJsonObject.getNullProbability(column.getColumnName()));

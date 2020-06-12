@@ -13,7 +13,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 
-public class TidbAnalyzer extends AbstractAnalyzer {
+public class Tidb3Analyzer extends AbstractAnalyzer {
     private static final Pattern ROW_COUNTS = Pattern.compile("rows:[0-9]*");
     private static final Pattern INNER_JOIN_OUTER_KEY = Pattern.compile("outer key:.*,");
     private static final Pattern INNER_JOIN_INNER_KEY = Pattern.compile("inner key:.*");
@@ -25,8 +25,8 @@ public class TidbAnalyzer extends AbstractAnalyzer {
     HashMap<String, String> tidbSelectArgs;
 
 
-    public TidbAnalyzer(AbstractDbConnector dbConnector, HashMap<String, String> tidbSelectArgs,
-                        HashMap<String, Schema> schemas) {
+    public Tidb3Analyzer(AbstractDbConnector dbConnector, HashMap<String, String> tidbSelectArgs,
+                         HashMap<String, Schema> schemas) {
         super(dbConnector, schemas);
         this.tidbSelectArgs = tidbSelectArgs;
     }
@@ -87,8 +87,28 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                 } else if (readerType.contains(nodeType)) {
                     //在树中维护下一层的信息
                     i++;
+                    String nextNodeType;
+                    //如果下一层是过滤节点，并且属该节点的子节点，则跳过
+                    while (true) {
+                        String[] nextLevelAndType = queryPlan.get(i)[0].split("─");
+                        nextNodeType = nextLevelAndType[1].split("_")[0];
+                        int nextLevel = (nextLevelAndType[0].length() - 1) / 2;
+                        if (nextLevel >= currentLevel) {
+                            if (passNodeType.contains(nextNodeType)) {
+                                if (i == queryPlan.size() - 1) {
+                                    break;
+                                }
+                                i++;
+                            } else {
+                                break;
+                            }
+                        } else {
+                            nextNodeType = queryPlan.get(--i)[0].split("─")[1].split("_")[0];
+                            break;
+                        }
+                    }
                     //判断下一层是不是selection,如果下一层是selection, 则跳过下层的table scan操作
-                    if (filterNodeType.contains(queryPlan.get(i)[0].split("─")[1].split("_")[0])) {
+                    if (filterNodeType.contains(nextNodeType)) {
                         executionNode = new ExecutionNode(ExecutionNodeType.filter, queryPlan.get(i++)[1]);
                     } else {
                         executionNode = new ExecutionNode(ExecutionNodeType.scan, queryPlan.get(i)[1]);

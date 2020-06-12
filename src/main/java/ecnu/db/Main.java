@@ -4,7 +4,7 @@ package ecnu.db;
 import com.alibaba.druid.sql.SQLUtils;
 import ecnu.db.analyzer.online.AbstractAnalyzer;
 import ecnu.db.analyzer.online.ExecutionNode;
-import ecnu.db.analyzer.online.TidbAnalyzer;
+import ecnu.db.analyzer.online.Tidb3Analyzer;
 import ecnu.db.analyzer.statical.QueryTableName;
 import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.dbconnector.TidbConnector;
@@ -107,7 +107,6 @@ public class Main {
     public static void main(String[] args) throws TouchstoneToolChainException, SQLException, IOException, ParseException {
         SystemConfig systemConfig = SystemConfig.readConfig(args[0]);
 
-
         File sqlInput = new File(systemConfig.getSqlsDirectory());
         File[] files = sqlInput.listFiles();
         if (files == null) {
@@ -150,9 +149,10 @@ public class Main {
             System.out.println("成功");
             schemas.put(tableName, schema);
         }
+
         System.out.println("获取表结构和数据分布成功，开始获取query查询计划");
 
-        AbstractAnalyzer queryAnalyzer = new TidbAnalyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        AbstractAnalyzer queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
 
         File resultSqls = new File(systemConfig.getResultDirectory() + "/sql/");
         if (!resultSqls.exists()) {
