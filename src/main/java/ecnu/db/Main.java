@@ -14,6 +14,7 @@ import ecnu.db.schema.generation.TidbSchemaGenerator;
 import ecnu.db.utils.ReadQuery;
 import ecnu.db.utils.SystemConfig;
 import ecnu.db.utils.TouchstoneToolChainException;
+import org.apache.commons.io.FileUtils;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -155,7 +156,9 @@ public class Main {
 
         AbstractAnalyzer queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
 
-        File retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
+        File retDir = new File(systemConfig.getResultDirectory()), retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
+        if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
+        if (retDir.isDirectory()) FileUtils.deleteDirectory(retDir);
         retSqlDir.mkdirs();
 
         List<String> queryInfos = new LinkedList<>();
