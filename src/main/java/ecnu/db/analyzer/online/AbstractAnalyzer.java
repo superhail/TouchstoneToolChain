@@ -40,32 +40,50 @@ public abstract class AbstractAnalyzer {
      */
     public abstract ExecutionNode getExecutionTree(List<String[]> queryPlan) throws TouchstoneToolChainException;
 
+    /**
+     * 分析join信息
+     *
+     * @param joinInfo join字符串
+     * @return 长度为4的字符串数组，0，1为join info左侧的表名和列名，2，3为join右侧的表明和列名
+     * @throws TouchstoneToolChainException 无法分析的join条件
+     */
+    abstract String[] analyzeJoinInfo(String joinInfo) throws TouchstoneToolChainException;
+
+    /**
+     * 分析传入的select 过滤条件，传出表名和格式化后的condition
+     * todo 增加对or的支持
+     *
+     * @param selectCondition 传入的select条件语句
+     * @return 表名和格式化后的condition
+     */
+    abstract Pair<String, String> analyzeSelectCondition(String selectCondition) throws TouchstoneToolChainException;
+
     public List<String[]> getQueryPlan(String sql) throws SQLException {
         aliasDic = queryAliasParser.getTableAlias(sql, getDbType());
         return dbConnector.explainQuery(sql, getSqlInfoColumns());
     }
 
     /**
-     * 将查询树重构为约束链
+     * 获取查询树的约束链信息和表信息
      *
-     * @param root 查询树的根
-     * @return 该查询树结构出的约束链
+     * @param root 查询树
+     * @return 该查询树结构出的约束链信息和表信息
      */
-    public List<String> outputNode(ExecutionNode root) throws SQLException {
+    public List<String> extractQueryInfos(ExecutionNode root) throws SQLException {
 
         List<String> queryInfos = new ArrayList<>();
         do {
-            QueryInfoChain queryInfo = null;
+            QueryInfo queryInfo = null;
             try {
-                queryInfo = getQueryInfo(root);
+                queryInfo = extractConstraintChain(root);
             } catch (TouchstoneToolChainException e) {
                 e.printStackTrace();
             }
             if (queryInfo == null) {
                 break;
             } else {
-                if (!queryInfo.getQueryInfo().isBlank()) {
-                    queryInfos.add("[" + queryInfo.getTableName() + "];" + queryInfo.getQueryInfo());
+                if (!queryInfo.getData().isBlank()) {
+                    queryInfos.add("[" + queryInfo.getTableName() + "];" + queryInfo.getData());
                 }
             }
         } while (true);
@@ -79,7 +97,7 @@ public abstract class AbstractAnalyzer {
      * @param node 输入查询语法树的根节点
      * @return 没有输出过的query约束链
      */
-    private QueryInfoChain getQueryInfo(ExecutionNode node) throws TouchstoneToolChainException, SQLException {
+    private QueryInfo extractConstraintChain(ExecutionNode node) throws TouchstoneToolChainException, SQLException {
 
         // 如果节点为空则直接返回
         if (node == null) {
@@ -100,136 +118,114 @@ public abstract class AbstractAnalyzer {
             }
         }
 
-        //获取来自子节点的query info
-        QueryInfoChain queryInfo = getQueryInfo(node.getLeftNode());
-        if (queryInfo == null) {
-            queryInfo = getQueryInfo(node.getRightNode());
+        //获取来自子节点的constraintChain
+        QueryInfo constraintChain = extractConstraintChain(node.getLeftNode());
+        if (constraintChain == null) {
+            constraintChain = extractConstraintChain(node.getRightNode());
         }
 
-        // 如果没有获取到query info，则本身为filter节点或者scan节点
-        if (queryInfo == null) {
+        // 如果没有获取到constraintChain，则本身为filter节点或者scan节点
+        if (constraintChain == null) {
             node.setVisited();
             if (node.getType() == ExecutionNode.ExecutionNodeType.filter) {
                 Pair<String, String> tableNameAndSelectCondition = analyzeSelectCondition(node.getInfo());
                 String selectInfo = "[0," + tableNameAndSelectCondition.getRight() + "," +
                         (double) node.getOutputRows() / schemas.get(tableNameAndSelectCondition.getLeft()).getTableSize() + "];";
-                return new QueryInfoChain(selectInfo, tableNameAndSelectCondition.getLeft(), node.getOutputRows());
+                return new QueryInfo(selectInfo, tableNameAndSelectCondition.getLeft(), node.getOutputRows());
             } else if (node.getType() == ExecutionNode.ExecutionNodeType.scan) {
                 String tableName = node.getInfo().split(",")[0].substring(6).toLowerCase();
                 if (aliasDic != null && aliasDic.containsKey(tableName)) {
                     tableName = aliasDic.get(tableName);
                 }
-                return new QueryInfoChain("", tableName, schemas.get(tableName).getTableSize());
+                return new QueryInfo("", tableName, schemas.get(tableName).getTableSize());
             } else {
                 throw new TouchstoneToolChainException("join节点的左右节点已经被访问过");
             }
         } else {
             // 如果遍历结束，则不需要继续遍历
-            if (!queryInfo.isStop()) {
+            if (!constraintChain.isStop()) {
                 if (node.getType() == ExecutionNode.ExecutionNodeType.join) {
                     String[] joinColumnInfos = analyzeJoinInfo(node.getInfo());
+                    String pkTable = joinColumnInfos[0], pkCol = joinColumnInfos[1],
+                            fkTable = joinColumnInfos[2], fkCol = joinColumnInfos[3];
+                    analyzeJoinInfo(node.getInfo());
                     //如果当前的join节点，不属于之前遍历的节点，则停止继续向上访问
-                    if (!joinColumnInfos[0].equals(queryInfo.getTableName())
-                            && !joinColumnInfos[2].equals(queryInfo.getTableName())) {
-                        System.out.println(node.getInfo());
-                        System.out.println(queryInfo.getTableName() + " " + joinColumnInfos[0] + " " + joinColumnInfos[2]);
-                        queryInfo.setStop();
+                    if (!pkTable.equals(constraintChain.getTableName())
+                            && !fkTable.equals(constraintChain.getTableName())) {
+                        constraintChain.setStop();
                     } else {
                         //将本表的信息放在前面，交换位置
-                        if (queryInfo.getTableName().equals(joinColumnInfos[2])) {
-                            String temp = joinColumnInfos[0];
-                            joinColumnInfos[0] = joinColumnInfos[2];
-                            joinColumnInfos[2] = temp;
-                            temp = joinColumnInfos[1];
-                            joinColumnInfos[1] = joinColumnInfos[3];
-                            joinColumnInfos[3] = temp;
+                        if (constraintChain.getTableName().equals(fkTable)) {
+                            pkTable = joinColumnInfos[2];
+                            pkCol = joinColumnInfos[3];
+                            fkTable = joinColumnInfos[0];
+                            fkCol = joinColumnInfos[1];
                         }
                         //根据主外键分别设置约束链输出信息
-                        if (isPrimaryKey(joinColumnInfos)) {
-                            queryInfo.setStop();
+                        if (isPrimaryKey(new String[]{pkTable, pkCol, fkTable, fkCol})) {
+                            constraintChain.setStop();
                             if (node.getJoinTag() < 0) {
-                                node.setJoinTag(schemas.get(joinColumnInfos[0]).getJoinTag());
+                                node.setJoinTag(schemas.get(pkTable).getJoinTag());
                             }
-                            queryInfo.addQueryInfo("[1," + joinColumnInfos[1].replace(',', '#') + "," +
+                            constraintChain.addQueryInfo("[1," + pkCol.replace(',', '#') + "," +
                                     node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
                             //设置主键
-                            schemas.get(joinColumnInfos[0]).setPrimaryKeys(joinColumnInfos[1]);
+                            schemas.get(pkTable).setPrimaryKeys(pkCol);
                         } else {
                             if (node.getJoinTag() < 0) {
-                                node.setJoinTag(schemas.get(joinColumnInfos[0]).getJoinTag());
+                                node.setJoinTag(schemas.get(pkTable).getJoinTag());
                             }
-                            String primaryKey = joinColumnInfos[2] + "." + joinColumnInfos[3];
-                            queryInfo.addQueryInfo("[2," + joinColumnInfos[1].replace(',', '#') + "," +
-                                    (double) node.getOutputRows() / queryInfo.getLastNodeLineCount() + "," +
+                            String primaryKey = fkTable + "." + fkCol;
+                            constraintChain.addQueryInfo("[2," + fkCol.replace(',', '#') + "," +
+                                    (double) node.getOutputRows() / constraintChain.getLastNodeLineCount() + "," +
                                     primaryKey.replace(',', '#') + "," +
                                     node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
                             //设置外键
-                            System.out.println("table:" + joinColumnInfos[0] + ".column:" + joinColumnInfos[1] + " -ref- table:" +
-                                    joinColumnInfos[2] + ".column:" + joinColumnInfos[3]);
-                            schemas.get(joinColumnInfos[0]).addForeignKey(joinColumnInfos[1], joinColumnInfos[2], joinColumnInfos[3]);
-                            queryInfo.setLastNodeLineCount(node.getOutputRows());
+                            schemas.get(pkTable).addForeignKey(pkCol, fkTable, fkCol);
+                            constraintChain.setLastNodeLineCount(node.getOutputRows());
                         }
                         if (node.getLeftNode().isVisited() && node.getRightNode().isVisited()) {
                             node.setVisited();
                         }
                     }
-                } else {
-                    if (node.getType() == ExecutionNode.ExecutionNodeType.filter) {
-                        Pair<String, String> tableNameAndSelectCondition = analyzeSelectCondition(node.getInfo());
-                        if (queryInfo.getTableName().equals(tableNameAndSelectCondition.getKey())) {
-                            node.setVisited();
-                            queryInfo.addQueryInfo("[0," + tableNameAndSelectCondition.getRight() + "," +
-                                    (double) node.getOutputRows() / queryInfo.getLastNodeLineCount() + "];");
-                        }
+                } else if (node.getType() == ExecutionNode.ExecutionNodeType.filter){
+                    Pair<String, String> tableNameAndSelectCondition = analyzeSelectCondition(node.getInfo());
+                    if (constraintChain.getTableName().equals(tableNameAndSelectCondition.getKey())) {
+                        node.setVisited();
+                        constraintChain.addQueryInfo("[0," + tableNameAndSelectCondition.getRight() + "," +
+                                (double) node.getOutputRows() / constraintChain.getLastNodeLineCount() + "];");
                     }
                 }
             }
-            return queryInfo;
+            return constraintChain;
         }
     }
 
     /**
      * 根据输入的列名统计非重复值的个数，进而给出该列是否为主键
      *
-     * @param columnInfos 输入的列名
+     * @param columnInfos 输入的列名[pkTable, pkCol, fkTable, fkCol]
      * @return 该列是否为主键
      */
     private boolean isPrimaryKey(String[] columnInfos) throws TouchstoneToolChainException, SQLException {
-        if (!columnInfos[1].contains(",")) {
-            if (schemas.get(columnInfos[0]).getNdv(columnInfos[1]) == schemas.get(columnInfos[2]).getNdv(columnInfos[3])) {
-                return schemas.get(columnInfos[0]).getTableSize() < schemas.get(columnInfos[2]).getTableSize();
+        String pkTable = columnInfos[0], pkCol = columnInfos[1], fkTable = columnInfos[2], fkCol = columnInfos[3];
+        if (String.format("%s.%s", pkTable, pkCol).equals(schemas.get(fkTable).getMetaDataFks().get(fkCol))) return true;
+        if (!pkCol.contains(",")) {
+            if (schemas.get(pkTable).getNdv(pkCol) == schemas.get(fkTable).getNdv(fkCol)) {
+                return schemas.get(pkTable).getTableSize() < schemas.get(fkTable).getTableSize();
             } else {
-                return schemas.get(columnInfos[0]).getNdv(columnInfos[1]) > schemas.get(columnInfos[2]).getNdv(columnInfos[3]);
+                return schemas.get(pkTable).getNdv(columnInfos[1]) > schemas.get(fkTable).getNdv(fkCol);
             }
         } else {
-            int leftTableNdv = dbConnector.getMultiColumnsNdv(columnInfos[0], columnInfos[1]);
-            int rightTableNdv = dbConnector.getMultiColumnsNdv(columnInfos[2], columnInfos[3]);
+            int leftTableNdv = dbConnector.getMultiColumnsNdv(pkTable, pkCol);
+            int rightTableNdv = dbConnector.getMultiColumnsNdv(fkTable, fkCol);
             if (leftTableNdv == rightTableNdv) {
-                return schemas.get(columnInfos[0]).getTableSize() < schemas.get(columnInfos[2]).getTableSize();
+                return schemas.get(pkTable).getTableSize() < schemas.get(fkTable).getTableSize();
             } else {
                 return leftTableNdv > rightTableNdv;
             }
         }
     }
-
-    /**
-     * 分析join信息
-     *
-     * @param joinInfo join字符串
-     * @return 长度为4的字符串数组，0，1为join info左侧的表名和列名，2，3为join右侧的表明和列名
-     * @throws TouchstoneToolChainException 无法分析的join条件
-     */
-    abstract String[] analyzeJoinInfo(String joinInfo) throws TouchstoneToolChainException;
-
-
-    /**
-     * 分析传入的select 过滤条件，传出表名和格式化后的condition
-     * todo 增加对or的支持
-     *
-     * @param selectCondition 传入的select条件语句
-     * @return 表名和格式化后的condition
-     */
-    abstract Pair<String, String> analyzeSelectCondition(String selectCondition) throws TouchstoneToolChainException;
 
     public HashMap<String, List<String>> getArgsAndIndex() {
         return argsAndIndex;

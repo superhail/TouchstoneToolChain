@@ -18,10 +18,12 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
     private static final Pattern INNER_JOIN_OUTER_KEY = Pattern.compile("outer key:.*,");
     private static final Pattern INNER_JOIN_INNER_KEY = Pattern.compile("inner key:.*");
     private static final Pattern JOIN_EQ_OPERATOR = Pattern.compile("equal:\\[.*]");
-    HashSet<String> readerType = new HashSet<>(Arrays.asList("TableReader", "IndexReader", "IndexLookUp"));
-    HashSet<String> passNodeType = new HashSet<>(Arrays.asList("Projection", "TopN", "Sort", "HashAgg", "StreamAgg", "TableScan", "IndexScan"));
-    HashSet<String> joinNodeType = new HashSet<>(Arrays.asList("HashRightJoin", "HashLeftJoin", "IndexMergeJoin", "IndexHashJoin", "IndexJoin"));
-    HashSet<String> filterNodeType = new HashSet<>(Collections.singletonList("Selection"));
+    private static final Pattern PLAN_ID = Pattern.compile("([a-zA-Z]+_[0-9]+)");
+    HashSet<String> readerNodeTypes = new HashSet<>(Arrays.asList("TableReader", "IndexReader", "IndexLookUp"));
+    HashSet<String> passNodeTypes = new HashSet<>(Arrays.asList("Projection", "TopN", "Sort", "HashAgg", "StreamAgg", "IndexScan"));
+    HashSet<String> joinNodeTypes = new HashSet<>(Arrays.asList("HashRightJoin", "HashLeftJoin", "IndexMergeJoin", "IndexHashJoin", "IndexJoin", "MergeJoin"));
+    HashSet<String> filterNodeTypes = new HashSet<>(Collections.singletonList("Selection"));
+    HashSet<String> scanNodeTypes = new HashSet<>(Arrays.asList("TableScan"));
     HashMap<String, String> tidbSelectArgs;
 
 
@@ -43,106 +45,79 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
 
     @Override
     public ExecutionNode getExecutionTree(List<String[]> queryPlan) throws TouchstoneToolChainException {
-        //清空参数和位置的对应关系
-        argsAndIndex.clear();
+        RawNode rawNodeRoot = buildRawNodeTree(queryPlan);
+        ExecutionNode root = buildExecutionTree(rawNodeRoot);
 
-        Stack<ExecutionNode> nodes = new Stack<>();
-        // 查询树上一层级的位置和当前的位置，用于判断是否出现了层级变动，方便构建查询树
-        int lastLevel = -1, currentLevel = 0;
-
-        // 解析出的节点的类别
-        String nodeType;
-        Matcher m;
-        for (int i = 0; i < queryPlan.size(); i++) {
-            String[] subQueryPlan = queryPlan.get(i);
-            // 分析查询节点的位置
-            String[] levelAndType = subQueryPlan[0].split("─");
-            //如果等于1，则为初始节点
-            if (levelAndType.length == 1) {
-                nodeType = levelAndType[0].split("_")[0];
-            } else {
-                //通过"-"前的字符判定层级
-                currentLevel = (levelAndType[0].length() - 1) / 2;
-                nodeType = levelAndType[1].split("_")[0];
-            }
-
-            // 如果不分析此类型，则继续扫描
-            if (!passNodeType.contains(nodeType)) {
-                ExecutionNode executionNode;
-
-                // 抽取 rowCount，失败时rowCount等于0
-                int rowCount = (m = ROW_COUNTS.matcher(subQueryPlan[2])).find() ?
-                        Integer.parseInt(m.group(0).split(":")[1]) : 0;
-                // 如果属于join，则记录信息
-                if (joinNodeType.contains(nodeType)) {
-                    executionNode = new ExecutionNode(ExecutionNodeType.join, rowCount, subQueryPlan[1]);
-                }
-                // 如果过滤节点，记录信息
-                else if (filterNodeType.contains(nodeType)) {
-                    executionNode = new ExecutionNode(ExecutionNodeType.filter, rowCount, subQueryPlan[1]);
-                    //跳过下层的table scan
-                    if (readerType.contains(queryPlan.get(i + 1)[0].split("─")[1].split("_")[0])) {
-                        i++;
-                    }
-                } else if (readerType.contains(nodeType)) {
-                    //在树中维护下一层的信息
-                    i++;
-                    String nextNodeType;
-                    //如果下一层是过滤节点，并且属该节点的子节点，则跳过
-                    while (true) {
-                        String[] nextLevelAndType = queryPlan.get(i)[0].split("─");
-                        nextNodeType = nextLevelAndType[1].split("_")[0];
-                        int nextLevel = (nextLevelAndType[0].length() - 1) / 2;
-                        if (nextLevel >= currentLevel) {
-                            if (passNodeType.contains(nextNodeType)) {
-                                if (i == queryPlan.size() - 1) {
-                                    break;
-                                }
-                                i++;
-                            } else {
-                                break;
-                            }
-                        } else {
-                            nextNodeType = queryPlan.get(--i)[0].split("─")[1].split("_")[0];
-                            break;
-                        }
-                    }
-                    //判断下一层是不是selection,如果下一层是selection, 则跳过下层的table scan操作
-                    if (filterNodeType.contains(nextNodeType)) {
-                        executionNode = new ExecutionNode(ExecutionNodeType.filter, queryPlan.get(i++)[1]);
-                    } else {
-                        executionNode = new ExecutionNode(ExecutionNodeType.scan, queryPlan.get(i)[1]);
-                    }
-                }
-                // 如果在三类节点中都没有找到匹配，则需要报错
-                else {
-                    throw new TouchstoneToolChainException("未支持的查询树Node，类型为" + nodeType);
-                }
-
-                // 计算查询树的层级
-                if (currentLevel > lastLevel) {
-                    if (!nodes.empty()) {
-                        nodes.peek().setLeftNode(executionNode);
-                    }
-                } else {
-                    try {
-                        while (nodes.peek().getType() != ExecutionNodeType.join || nodes.peek().getRightNode() != null) {
-                            nodes.pop();
-                        }
-                    } catch (EmptyStackException e) {
-                        e.printStackTrace();
-                    }
-                    nodes.peek().setRightNode(executionNode);
-                }
-                nodes.push(executionNode);
-                lastLevel = currentLevel;
-            }
-        }
-
-        return nodes.get(0);
+        return root;
     }
 
+    // 合并节点，删除query plan中不需要或者不支持的节点
+    private ExecutionNode buildExecutionTree(RawNode rawNode) throws TouchstoneToolChainException {
+        argsAndIndex.clear();                                                                       //清空参数和位置的对应关系
+        if (rawNode == null) return null;
+        String[] subQueryPlan = rawNode.data;
+        String planId = subQueryPlan[0], operatorInfo = subQueryPlan[1],executionInfo = subQueryPlan[2];
+        planId = extarctPattern(PLAN_ID, planId);
+        Matcher matcher;
+        String nodeType = rawNode.nodeType;
+        if (passNodeTypes.contains(nodeType)) return rawNode.left == null ? null: buildExecutionTree(rawNode.left);
+        int rowCount = (matcher = ROW_COUNTS.matcher(executionInfo)).find() ?
+                Integer.parseInt(matcher.group(0).split(":")[1]) : 0;
+        ExecutionNode node = null;
+        if (scanNodeTypes.contains(nodeType)) {                                                      // 处理底层的TableScan
+            return new ExecutionNode(planId, ExecutionNodeType.scan, rowCount, operatorInfo);
+        } else if (filterNodeTypes.contains(nodeType)) {
+            node = new ExecutionNode(planId, ExecutionNodeType.filter, rowCount, operatorInfo);
+            if (rawNode.left != null && scanNodeTypes.contains(rawNode.left.nodeType)) return node;  // 跳过底部的TableScan
+            node.leftNode = rawNode.left == null ? null: buildExecutionTree(rawNode.left);
+            node.rightNode = rawNode.right == null ? null: buildExecutionTree(rawNode.right);
+        } else if (joinNodeTypes.contains(nodeType)) {
+            node = new ExecutionNode(planId, ExecutionNodeType.join, rowCount, operatorInfo);
+            node.leftNode = rawNode.left == null ? null: buildExecutionTree(rawNode.left);
+            node.rightNode = rawNode.right == null ? null: buildExecutionTree(rawNode.right);
+        } else if (readerNodeTypes.contains(nodeType)) {
+            if (rawNode.right != null && !passNodeTypes.contains(rawNode.right.nodeType)) {         // 右侧节点非空且不属于跳过的节点，跳过左侧节点
+                return buildExecutionTree(rawNode.right);
+            } else if ("IndexScan".equals(rawNode.left.nodeType)) {                                 // 处理IndexReader后接一个IndexScan的情况
+                return new ExecutionNode(planId, ExecutionNodeType.scan, rowCount, rawNode.left.data[1]);
+            }
+            node = buildExecutionTree(rawNode.left);
+        } else {
+            throw new TouchstoneToolChainException("未支持的查询树Node，类型为" + nodeType);
+        }
+        return node;
+    }
 
+    private String extarctPattern(Pattern pattern, String planId) {
+        Matcher matcher = pattern.matcher(planId);
+        boolean found = matcher.find();
+        assert found;
+        planId = matcher.group(0);
+        return planId;
+    }
+
+    // 生成query plan的树
+    private RawNode buildRawNodeTree(List<String[]> queryPlan) {
+        Stack<Pair<Integer, RawNode>> pStack = new Stack<>();
+        String nodeType = extarctPattern(PLAN_ID, queryPlan.get(0)[0]).split("_")[0];
+        RawNode rawNodeRoot = new RawNode(null, null, nodeType, queryPlan.get(0)), rawNode;
+        pStack.push(Pair.of(0, rawNodeRoot));
+        for (String[] subQueryPlan: queryPlan.subList(1, queryPlan.size())) {
+            nodeType = extarctPattern(PLAN_ID, subQueryPlan[0]).split("_")[0];
+            rawNode = new RawNode(null, null, nodeType, subQueryPlan);
+            String planId = subQueryPlan[0];
+            int level = (planId.split("─")[0].length() + 1) / 2;
+            while (pStack.peek().getKey() > level) pStack.pop(); // pop直到找到同一个层级的节点
+            if (pStack.peek().getKey().equals(level)) {
+                pStack.pop();
+                pStack.peek().getValue().right = rawNode;
+            } else {
+                pStack.peek().getValue().left = rawNode;
+            }
+            pStack.push(Pair.of(level, rawNode));
+        }
+        return rawNodeRoot;
+    }
     /**
      * 分析join信息
      *

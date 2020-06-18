@@ -13,8 +13,10 @@ public class ExecutionNode {
      * 节点额外信息
      */
     private final String info;
+
+    private String id;
     /**
-     * 指向左节点
+     * 指向右节点
      */
     ExecutionNode rightNode;
     /**
@@ -34,15 +36,36 @@ public class ExecutionNode {
      */
     private int joinTag = -1;
 
+    public ExecutionNode(String id, ExecutionNodeType type, int outputRows, String info) {
+        this.type = type;
+        this.info = info;
+        this.id = id;
+        this.outputRows = outputRows;
+    }
+
     public ExecutionNode(ExecutionNodeType type, int outputRows, String info) {
         this.type = type;
         this.outputRows = outputRows;
         this.info = info;
     }
 
+    public ExecutionNode(String id, ExecutionNodeType type, String info) {
+        this.id = id;
+        this.type = type;
+        this.info = info;
+    }
+
     public ExecutionNode(ExecutionNodeType type, String info) {
         this.type = type;
         this.info = info;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
     }
 
     public int getJoinTag() {
@@ -102,5 +125,12 @@ public class ExecutionNode {
          * join 节点，同时具有左右子节点，只能作为非叶子节点
          */
         join
+    }
+
+    @Override
+    public String toString() {
+        return "ExecutionNode{" +
+                "id='" + id + '\'' +
+                '}';
     }
 }
