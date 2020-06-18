@@ -3,10 +3,7 @@ package ecnu.db.dbconnector;
 import ecnu.db.utils.SystemConfig;
 import ecnu.db.utils.TouchstoneToolChainException;
 
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
 
 /**
@@ -19,6 +16,8 @@ public abstract class AbstractDbConnector {
      */
     protected Statement stmt;
 
+    public DatabaseMetaData databaseMetaData;
+
     AbstractDbConnector(SystemConfig config) throws TouchstoneToolChainException {
         // 数据库的用户名与密码
         String user = config.getDatabaseUser();
@@ -30,6 +29,7 @@ public abstract class AbstractDbConnector {
                 e.printStackTrace();
             }
             stmt = DriverManager.getConnection(dbUrl(config), user, pass).createStatement();
+            databaseMetaData = DriverManager.getConnection(dbUrl(config), user, pass).getMetaData();
         } catch (SQLException e) {
             System.out.println(e.getMessage());
             throw new TouchstoneToolChainException("无法建立数据库连接,连接信息为\n" + dbUrl(config));
@@ -42,8 +42,6 @@ public abstract class AbstractDbConnector {
 
     abstract String abstractGetCreateTableSql(String tableName);
 
-
-    //数据库标准操作
     public ArrayList<String> getTableNames() throws SQLException {
         ResultSet rs = stmt.executeQuery(abstractGetTableNames());
         ArrayList<String> tables = new ArrayList<>();
@@ -53,7 +51,7 @@ public abstract class AbstractDbConnector {
         return tables;
     }
 
-    public String getCreateTableSql(String tableName) throws SQLException {
+    public String getTableDDL(String tableName) throws SQLException {
         ResultSet rs = stmt.executeQuery(abstractGetCreateTableSql(tableName));
         rs.next();
         return rs.getString(2).trim().toLowerCase();

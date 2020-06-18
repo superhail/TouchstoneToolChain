@@ -18,7 +18,7 @@ import java.util.HashMap;
 /**
  * @author wangqingshuai
  */
-public class TidbSchemaGeneration extends AbstractSchemaGeneration {
+public class TidbSchemaGenerator extends AbstractSchemaGenerator {
     @Override
     Pair<String[], String> getColumnSqlAndKeySql(String createTableSql) {
         createTableSql = createTableSql.toLowerCase();

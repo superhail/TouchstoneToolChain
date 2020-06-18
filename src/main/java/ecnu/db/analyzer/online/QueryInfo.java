@@ -1,13 +1,13 @@
 package ecnu.db.analyzer.online;
 
-public class QueryInfoChain {
-    String queryInfo;
+public class QueryInfo {
+    String data;
     String tableName;
     int lastNodeLineCount;
     boolean stop;
 
-    public QueryInfoChain(String queryInfo, String tableName, int lastNodeLineCount) {
-        this.queryInfo = queryInfo;
+    public QueryInfo(String data, String tableName, int lastNodeLineCount) {
+        this.data = data;
         this.lastNodeLineCount = lastNodeLineCount;
         this.tableName = tableName;
         stop = false;
@@ -18,12 +18,12 @@ public class QueryInfoChain {
         return tableName;
     }
 
-    public String getQueryInfo() {
-        return queryInfo;
+    public String getData() {
+        return data;
     }
 
-    public void addQueryInfo(String queryInfo) {
-        this.queryInfo += queryInfo;
+    public void addQueryInfo(String data) {
+        this.data += data;
     }
 
     public int getLastNodeLineCount() {

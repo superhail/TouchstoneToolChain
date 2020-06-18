@@ -9,11 +9,12 @@ import ecnu.db.analyzer.statical.QueryTableName;
 import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.dbconnector.TidbConnector;
 import ecnu.db.schema.Schema;
-import ecnu.db.schema.generation.AbstractSchemaGeneration;
-import ecnu.db.schema.generation.TidbSchemaGeneration;
+import ecnu.db.schema.generation.AbstractSchemaGenerator;
+import ecnu.db.schema.generation.TidbSchemaGenerator;
 import ecnu.db.utils.ReadQuery;
 import ecnu.db.utils.SystemConfig;
 import ecnu.db.utils.TouchstoneToolChainException;
+import org.apache.commons.io.FileUtils;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -116,7 +117,7 @@ public class Main {
         File writeDirectory = new File(systemConfig.getResultDirectory());
 
         AbstractDbConnector dbConnector = new TidbConnector(systemConfig);
-        AbstractSchemaGeneration dbSchemaGeneration = new TidbSchemaGeneration();
+        AbstractSchemaGenerator dbSchemaGenerator = new TidbSchemaGenerator();
 
         System.out.println("开始获取表名");
         ArrayList<String> tableNames;
@@ -140,24 +141,25 @@ public class Main {
         for (String tableName : tableNames) {
             System.out.println("开始获取" + tableName + "的信息");
             System.out.print("获取表结构...");
-            Schema schema = dbSchemaGeneration.generateSchemaNoKeys(tableName, dbConnector.getCreateTableSql(tableName));
+            Schema schema = dbSchemaGenerator.generateSchemaNoKeys(tableName, dbConnector.getTableDDL(tableName));
             System.out.println("成功");
             System.out.print("获取表数据分布...");
-            dbSchemaGeneration.setDataRangeBySqlResult(schema.getAllColumns(), dbConnector.getDataRange(tableName,
-                    dbSchemaGeneration.getColumnDistributionSql(schema.getTableName(), schema.getAllColumns())));
-            dbSchemaGeneration.setDataRangeUnique(schema, dbConnector);
+            dbSchemaGenerator.setDataRangeBySqlResult(schema.getAllColumns(), dbConnector.getDataRange(tableName,
+                    dbSchemaGenerator.getColumnDistributionSql(schema.getTableName(), schema.getAllColumns())));
+            dbSchemaGenerator.setDataRangeUnique(schema, dbConnector);
             System.out.println("成功");
             schemas.put(tableName, schema);
         }
+        Schema.initFks(dbConnector.databaseMetaData, schemas);
 
         System.out.println("获取表结构和数据分布成功，开始获取query查询计划");
 
         AbstractAnalyzer queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
 
-        File resultSqls = new File(systemConfig.getResultDirectory() + "/sql/");
-        if (!resultSqls.exists()) {
-            resultSqls.mkdir();
-        }
+        File retDir = new File(systemConfig.getResultDirectory()), retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
+        if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
+        if (retDir.isDirectory()) FileUtils.deleteDirectory(retDir);
+        retSqlDir.mkdirs();
 
         List<String> queryInfos = new LinkedList<>();
         for (File sqlFile : files) {
@@ -165,16 +167,17 @@ public class Main {
                 List<String> sqls = ReadQuery.getSQLsFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
                 int index = 0;
                 BufferedWriter sqlWriter = new BufferedWriter(new FileWriter(
-                        new File(resultSqls.getPath() + "/" + sqlFile.getName())));
+                        new File(retSqlDir.getPath() + "/" + sqlFile.getName())));
                 List<String[]> queryPlan = new ArrayList<>();
                 for (String sql : sqls) {
+                    index++;
+                    String queryCanonicalName = String.format("%s_%d", sqlFile.getName(), index);
                     try {
-                        System.out.println(sqlFile.getName() + "_" + index + "\t");
-                        queryInfos.add("## " + sqlFile.getName() + "_" + index);
+                        queryInfos.add("## " + queryCanonicalName);
                         queryPlan = queryAnalyzer.getQueryPlan(sql);
                         ExecutionNode root = queryAnalyzer.getExecutionTree(queryPlan);
-                        queryInfos.addAll(queryAnalyzer.outputNode(root));
-                        System.out.println("获取成功");
+                        queryInfos.addAll(queryAnalyzer.extractQueryInfos(root));
+                        String outputMessage = String.format("%-15s Status:\033[32m获取成功\033[0m", queryCanonicalName);
                         queryAnalyzer.outputSuccess(true);
 
                         ArrayList<String> cannotFindArgs = new ArrayList<>();
@@ -214,7 +217,7 @@ public class Main {
                         cannotFindArgs.removeAll(reproductArgs);
                         if (cannotFindArgs.size() > 0) {
 
-                            System.out.println("请注意" + sqlFile.getName() + "_" + index + "中有参数无法完成替换，请查看该sql输出，手动替换");
+                            outputMessage += String.format("\033[31m  请注意%s中有参数无法完成替换，请查看该sql输出，手动替换;\033[0m", queryCanonicalName);
                             sqlWriter.write("-- cannotFindArgs:");
                             for (String cannotFindArg : cannotFindArgs) {
                                 sqlWriter.write(cannotFindArg + ":" + queryAnalyzer.getArgsAndIndex().get(cannotFindArg) + ",");
@@ -222,17 +225,19 @@ public class Main {
                             sqlWriter.write("\n");
                         }
                         if (conflictArgs.size() > 0) {
-                            System.out.println("请注意" + sqlFile.getName() + "_" + index + "中有参数出现多次，无法智能替换，请查看该sql输出，手动替换");
+                            outputMessage += String.format("\033[31m  请注意%s中有参数出现多次，无法智能，替换请查看该sql输出，手动替换;\033[0m", queryCanonicalName);
                             sqlWriter.write("-- conflictArgs:");
                             for (String conflictArg : conflictArgs) {
                                 sqlWriter.write(conflictArg + ":" + queryAnalyzer.getArgsAndIndex().get(conflictArg) + ",");
                             }
                             sqlWriter.write("\n");
                         }
+                        System.out.println(outputMessage);
                         sqlWriter.write(SQLUtils.format(sql, queryAnalyzer.getDbType(), SQLUtils.DEFAULT_LCASE_FORMAT_OPTION) + "\n");
                         sqlWriter.close();
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
+                        System.out.println(String.format("%-15s Status:\033[31m获取失败\033[0m", queryCanonicalName));
                         System.out.println(e.getMessage());
                         for (String[] strings : queryPlan) {
                             for (String string : strings) {
@@ -250,8 +255,9 @@ public class Main {
         BufferedWriter schemaWriter = new BufferedWriter(new FileWriter(
                 new File(writeDirectory.getPath() + "/schema.conf")));
         for (Schema schema : schemas.values()) {
-            schemaWriter.write(schema.formatSchemaInfo() + "\n");
-            schemaWriter.write(schema.formatDataDistributionInfo() + "\n");
+            String schemaInfo = schema.formatSchemaInfo(), dataDistributionInfo = schema.formatDataDistributionInfo();
+            if (schemaInfo != null) schemaWriter.write(schemaInfo + "\n");
+            if (dataDistributionInfo != null) schemaWriter.write(dataDistributionInfo + "\n");
         }
         schemaWriter.close();
         BufferedWriter ccWriter = new BufferedWriter(new FileWriter(
@@ -261,4 +267,6 @@ public class Main {
         }
         ccWriter.close();
     }
+
+
 }

@@ -1,9 +1,13 @@
 package ecnu.db.schema;
 
+import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.schema.column.AbstractColumn;
 import ecnu.db.schema.column.ColumnType;
 import ecnu.db.utils.TouchstoneToolChainException;
 
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.*;
 
@@ -16,6 +20,7 @@ public class Schema {
     private int tableSize;
     private String primaryKeys;
     private HashMap<String, String> foreignKeys;
+    private HashMap<String, String> metaDataFks; // 根据Database的metadata获取的外键信息
     private int joinTag;
     private int lastJoinTag;
 
@@ -24,6 +29,10 @@ public class Schema {
         this.columns = columns;
         joinTag = 1;
         lastJoinTag = 1;
+    }
+
+    public HashMap<String, AbstractColumn> getColumns() {
+        return columns;
     }
 
     /**
@@ -48,13 +57,48 @@ public class Schema {
         return true;
     }
 
-    public HashMap<String, AbstractColumn> getColumns() {
-        return columns;
+    /**
+     * 判断本表是否只依赖于这些表，用于确定是否存在全局拓扑序
+     *
+     * @param tableNames 已经确定存在拓扑序的表格
+     * @return 是否只依赖于这些表
+     */
+    public boolean onlyReferencingTables(HashSet<String> tableNames) {
+        if (foreignKeys != null) {
+            for (String referencingTableInfo : foreignKeys.values()) {
+                if (!tableNames.contains(referencingTableInfo.split(".")[0])) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**
-     * @return 当前表最新的join tag
+     * 初始化Schema.foreignKeys和Schema.metaDataFks
+     * @param metaData 数据库的元信息
+     * @param schemas 需要初始化的表
+     * @throws SQLException
+     * @throws TouchstoneToolChainException
      */
+    public static void initFks(DatabaseMetaData metaData, HashMap<String, Schema> schemas) throws SQLException, TouchstoneToolChainException {
+        for (Map.Entry<String, Schema> entry: schemas.entrySet()) {
+            String tableName = entry.getKey();
+            ResultSet rs = metaData.getImportedKeys(null, null, tableName);
+            while(rs.next()) {
+                String pkTable = rs.getString("PKTABLE_NAME"), pkCol = rs.getString("PKCOLUMN_NAME"),
+                        fkTable = rs.getString("FKTABLE_NAME"), fkCol = rs.getString("FKCOLUMN_NAME");
+                schemas.get(fkTable).addForeignKey(fkCol, pkTable, pkCol);
+            }
+        }
+
+        for (Map.Entry<String, Schema> entry: schemas.entrySet()) {
+            Schema schema = entry.getValue();
+            HashMap<String, String> fks = Optional.ofNullable(schema.getForeignKeys()).orElse(new HashMap<>());
+            schema.setMetaDataFks(fks);
+        }
+    }
+
     public int getJoinTag() {
         int temp = joinTag;
         joinTag *= 4;
@@ -103,23 +147,6 @@ public class Schema {
                 throw new TouchstoneToolChainException("query中使用了多列主键的部分主键");
             }
         }
-    }
-
-    /**
-     * 判断本表是否只依赖于这些表，用于确定是否存在全局拓扑序
-     *
-     * @param tableNames 已经确定存在拓扑序的表格
-     * @return 是否只依赖于这些表
-     */
-    public boolean onlyReferencingTables(HashSet<String> tableNames) {
-        if (foreignKeys != null) {
-            for (String referencingTableInfo : foreignKeys.values()) {
-                if (!tableNames.contains(referencingTableInfo.split(".")[0])) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     public int getNdv(String columnName) throws TouchstoneToolChainException {
@@ -234,5 +261,25 @@ public class Schema {
 
     public void setTableSize(int tableSize) {
         this.tableSize = tableSize;
+    }
+
+    public HashMap<String, String> getMetaDataFks() {
+        return metaDataFks;
+    }
+
+    public void setMetaDataFks(HashMap<String, String> metaDataFks) {
+        this.metaDataFks = metaDataFks;
+    }
+
+    public HashMap<String, String> getForeignKeys() {
+        return foreignKeys;
+    }
+
+    @Override
+    public String toString() {
+        return "Schema{" +
+                "tableName='" + tableName + '\'' +
+                ", tableSize=" + tableSize +
+                '}';
     }
 }

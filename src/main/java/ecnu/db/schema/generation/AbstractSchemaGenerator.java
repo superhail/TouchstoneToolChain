@@ -16,7 +16,7 @@ import java.util.Map;
 /**
  * @author wangqingshuai
  */
-public abstract class AbstractSchemaGeneration {
+public abstract class AbstractSchemaGenerator {
     /**
      * format sql and return two sqls
      *
