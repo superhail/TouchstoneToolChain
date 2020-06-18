@@ -51,13 +51,18 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         return root;
     }
 
-    // 合并节点，删除query plan中不需要或者不支持的节点
+    /**
+     * 合并节点，删除query plan中不需要或者不支持的节点，并根据节点类型提取对应信息
+     * @param rawNode 需要处理的query plan树
+     * @return 处理好的树
+     * @throws TouchstoneToolChainException
+     */
     private ExecutionNode buildExecutionTree(RawNode rawNode) throws TouchstoneToolChainException {
         argsAndIndex.clear();                                                                       //清空参数和位置的对应关系
         if (rawNode == null) return null;
         String[] subQueryPlan = rawNode.data;
         String planId = subQueryPlan[0], operatorInfo = subQueryPlan[1],executionInfo = subQueryPlan[2];
-        planId = extarctPattern(PLAN_ID, planId);
+        planId = extractPattern(PLAN_ID, planId);
         Matcher matcher;
         String nodeType = rawNode.nodeType;
         if (passNodeTypes.contains(nodeType)) return rawNode.left == null ? null: buildExecutionTree(rawNode.left);
@@ -88,22 +93,25 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         return node;
     }
 
-    private String extarctPattern(Pattern pattern, String planId) {
+    private String extractPattern(Pattern pattern, String planId) {
         Matcher matcher = pattern.matcher(planId);
         boolean found = matcher.find();
         assert found;
-        planId = matcher.group(0);
-        return planId;
+        return matcher.group(0);
     }
 
-    // 生成query plan的树
+    /**
+     * 根据explain analyze的结果生成query plan树
+     * @param queryPlan explain analyze的结果
+     * @return 生成好的树
+     */
     private RawNode buildRawNodeTree(List<String[]> queryPlan) {
         Stack<Pair<Integer, RawNode>> pStack = new Stack<>();
-        String nodeType = extarctPattern(PLAN_ID, queryPlan.get(0)[0]).split("_")[0];
+        String nodeType = extractPattern(PLAN_ID, queryPlan.get(0)[0]).split("_")[0];
         RawNode rawNodeRoot = new RawNode(null, null, nodeType, queryPlan.get(0)), rawNode;
         pStack.push(Pair.of(0, rawNodeRoot));
         for (String[] subQueryPlan: queryPlan.subList(1, queryPlan.size())) {
-            nodeType = extarctPattern(PLAN_ID, subQueryPlan[0]).split("_")[0];
+            nodeType = extractPattern(PLAN_ID, subQueryPlan[0]).split("_")[0];
             rawNode = new RawNode(null, null, nodeType, subQueryPlan);
             String planId = subQueryPlan[0];
             int level = (planId.split("─")[0].length() + 1) / 2;

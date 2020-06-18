@@ -14,6 +14,9 @@ public class ExecutionNode {
      */
     private final String info;
 
+    /**
+     * 对应explain analyze的query plan树的节点名称
+     */
     private String id;
     /**
      * 指向右节点
@@ -68,6 +71,9 @@ public class ExecutionNode {
         this.id = id;
     }
 
+    /**
+     * @return 当前表最新的join tag
+     */
     public int getJoinTag() {
         return joinTag;
     }

@@ -155,9 +155,8 @@ public class Main {
 
         AbstractAnalyzer queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
 
-        File retDir = new File(systemConfig.getResultDirectory()), retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
-        retDir.mkdir();
-        retSqlDir.mkdir();
+        File retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
+        retSqlDir.mkdirs();
 
         List<String> queryInfos = new LinkedList<>();
         for (File sqlFile : files) {

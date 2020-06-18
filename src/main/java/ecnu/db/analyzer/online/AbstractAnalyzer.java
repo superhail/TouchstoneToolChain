@@ -162,7 +162,7 @@ public abstract class AbstractAnalyzer {
                             fkCol = joinColumnInfos[1];
                         }
                         //根据主外键分别设置约束链输出信息
-                        if (isPrimaryKey(new String[]{pkTable, pkCol, fkTable, fkCol})) {
+                        if (isPrimaryKey(pkTable, pkCol, fkTable, fkCol)) {
                             constraintChain.setStop();
                             if (node.getJoinTag() < 0) {
                                 node.setJoinTag(schemas.get(pkTable).getJoinTag());
@@ -181,6 +181,8 @@ public abstract class AbstractAnalyzer {
                                     primaryKey.replace(',', '#') + "," +
                                     node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
                             //设置外键
+                            System.out.println("table:" + pkTable + ".column:" + pkCol + " -ref- table:" +
+                                    fkCol + ".column:" + fkTable);
                             schemas.get(pkTable).addForeignKey(pkCol, fkTable, fkCol);
                             constraintChain.setLastNodeLineCount(node.getOutputRows());
                         }
@@ -204,17 +206,17 @@ public abstract class AbstractAnalyzer {
     /**
      * 根据输入的列名统计非重复值的个数，进而给出该列是否为主键
      *
-     * @param columnInfos 输入的列名[pkTable, pkCol, fkTable, fkCol]
+     * @param pkTable, pkCol, fkTable, fkCol
      * @return 该列是否为主键
      */
-    private boolean isPrimaryKey(String[] columnInfos) throws TouchstoneToolChainException, SQLException {
-        String pkTable = columnInfos[0], pkCol = columnInfos[1], fkTable = columnInfos[2], fkCol = columnInfos[3];
+    private boolean isPrimaryKey(String pkTable, String pkCol, String fkTable, String fkCol) throws TouchstoneToolChainException, SQLException {
         if (String.format("%s.%s", pkTable, pkCol).equals(schemas.get(fkTable).getMetaDataFks().get(fkCol))) return true;
+        if (String.format("%s.%s", fkTable, fkCol).equals(schemas.get(pkTable).getMetaDataFks().get(pkCol))) return false;
         if (!pkCol.contains(",")) {
             if (schemas.get(pkTable).getNdv(pkCol) == schemas.get(fkTable).getNdv(fkCol)) {
                 return schemas.get(pkTable).getTableSize() < schemas.get(fkTable).getTableSize();
             } else {
-                return schemas.get(pkTable).getNdv(columnInfos[1]) > schemas.get(fkTable).getNdv(fkCol);
+                return schemas.get(pkTable).getNdv(pkCol) > schemas.get(fkTable).getNdv(fkCol);
             }
         } else {
             int leftTableNdv = dbConnector.getMultiColumnsNdv(pkTable, pkCol);

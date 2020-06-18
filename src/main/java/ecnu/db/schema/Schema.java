@@ -35,7 +35,52 @@ public class Schema {
         return columns;
     }
 
-    // 初始化Schema.foreignKeys和Schema.metaDataFks
+    /**
+     * 判定给定的表格是否满足全局拓扑序
+     *
+     * @param schemas 待验证的表格
+     * @return 是否存在全局拓扑序
+     */
+    public static boolean existsTopologicalOrderOrNot(Collection<Schema> schemas) {
+        HashSet<String> topologicalTables = new HashSet<>();
+        for (int i = 0; i < schemas.size(); i++) {
+            for (Schema schema : schemas) {
+                if (!topologicalTables.contains(schema.getTableName()) && schema.onlyReferencingTables(topologicalTables)) {
+                    topologicalTables.add(schema.getTableName());
+                    break;
+                }
+            }
+            if (i == topologicalTables.size()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 判断本表是否只依赖于这些表，用于确定是否存在全局拓扑序
+     *
+     * @param tableNames 已经确定存在拓扑序的表格
+     * @return 是否只依赖于这些表
+     */
+    public boolean onlyReferencingTables(HashSet<String> tableNames) {
+        if (foreignKeys != null) {
+            for (String referencingTableInfo : foreignKeys.values()) {
+                if (!tableNames.contains(referencingTableInfo.split(".")[0])) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 初始化Schema.foreignKeys和Schema.metaDataFks
+     * @param metaData 数据库的元信息
+     * @param schemas 需要初始化的表
+     * @throws SQLException
+     * @throws TouchstoneToolChainException
+     */
     public static void initFks(DatabaseMetaData metaData, HashMap<String, Schema> schemas) throws SQLException, TouchstoneToolChainException {
         for (Map.Entry<String, Schema> entry: schemas.entrySet()) {
             String tableName = entry.getKey();
