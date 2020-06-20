@@ -63,7 +63,7 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         }
         String[] subQueryPlan = rawNode.data;
         String planId = subQueryPlan[0], operatorInfo = subQueryPlan[1], executionInfo = subQueryPlan[2];
-        planId = extractPattern(planId);
+        planId = extractPattern(PLAN_ID, planId);
         Matcher matcher;
         String nodeType = rawNode.nodeType;
         if (passNodeTypes.contains(nodeType)) {
@@ -103,8 +103,8 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         return node;
     }
 
-    private String extractPattern(String planId) {
-        Matcher matcher = Tidb3Analyzer.PLAN_ID.matcher(planId);
+    private String extractPattern(Pattern pattern, String planId) {
+        Matcher matcher = pattern.matcher(planId);
         boolean found = matcher.find();
         assert found;
         return matcher.group(0);
@@ -118,11 +118,11 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
      */
     private RawNode buildRawNodeTree(List<String[]> queryPlan) {
         Stack<Pair<Integer, RawNode>> pStack = new Stack<>();
-        String nodeType = extractPattern(queryPlan.get(0)[0]).split("_")[0];
+        String nodeType = extractPattern(PLAN_ID, queryPlan.get(0)[0]).split("_")[0];
         RawNode rawNodeRoot = new RawNode(null, null, nodeType, queryPlan.get(0)), rawNode;
         pStack.push(Pair.of(0, rawNodeRoot));
         for (String[] subQueryPlan : queryPlan.subList(1, queryPlan.size())) {
-            nodeType = extractPattern(subQueryPlan[0]).split("_")[0];
+            nodeType = extractPattern(PLAN_ID, subQueryPlan[0]).split("_")[0];
             rawNode = new RawNode(null, null, nodeType, subQueryPlan);
             String planId = subQueryPlan[0];
             int level = (planId.split("─")[0].length() + 1) / 2;
@@ -131,6 +131,7 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
             }
             if (pStack.peek().getKey().equals(level)) {
                 pStack.pop();
+                assert !pStack.isEmpty();
                 pStack.peek().getValue().right = rawNode;
             } else {
                 pStack.peek().getValue().left = rawNode;
