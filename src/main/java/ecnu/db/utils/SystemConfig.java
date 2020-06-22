@@ -19,6 +19,7 @@ public class SystemConfig {
     private boolean crossMultiDatabase;
     private String resultDirectory;
     private String tidbHttpPort;
+    private String dataSource;
     private String databaseVersion;
     private String sqlsDirectory;
     private HashMap<ColumnType, HashSet<String>> typeConvert;
@@ -76,12 +77,12 @@ public class SystemConfig {
         this.tidbSelectArgs = tidbSelectArgs;
     }
 
-    public String getDatabaseVersion() {
-        return databaseVersion;
+    public String getDataSource() {
+        return dataSource;
     }
 
-    public void setDatabaseVersion(String databaseVersion) {
-        this.databaseVersion = databaseVersion;
+    public void setDataSource(String dataSource) {
+        this.dataSource = dataSource;
     }
 
     public String getTidbHttpPort() {
@@ -142,5 +143,13 @@ public class SystemConfig {
 
     public void setDatabaseName(String databaseName) {
         this.databaseName = databaseName;
+    }
+
+    public String getDatabaseVersion() {
+        return databaseVersion;
+    }
+
+    public void setDatabaseVersion(String databaseVersion) {
+        this.databaseVersion = databaseVersion;
     }
 }

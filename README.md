@@ -120,7 +120,8 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
     "databasePort": "4000",
     "databasePwd": "",
     "databaseUser": "root",
-    "databaseVersion": "tidb",
+    "dataSource": "tidb",
+    "databaseVersion": "3.1.0",
     "sqlsDirectory": "conf/sqls",
     "resultDirectory": "touchstoneconf",
     "typeConvert": {
@@ -159,7 +160,7 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
 
 + 数据库信息。按照配置文件顺序主要需要配置的字段有，待采集数据库的ip，数据库name，数据库端口，密码和用户名。
 
-+ 数据库版本。配置用于采集信息的数据库类型
++ 数据源与数据库版本。配置用于采集信息的数据库类型和版本，如上的tidb v3.1.0
 
 + 文件夹路径
 

@@ -156,7 +156,14 @@ public class Main {
 
         System.out.println("获取表结构和数据分布成功，开始获取query查询计划");
 
-        AbstractAnalyzer queryAnalyzer = new Tidb4Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        AbstractAnalyzer queryAnalyzer;
+        if (systemConfig.getDatabaseVersion().equals("3.1.0")) {
+            queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        } else if (systemConfig.getDatabaseVersion().equals("4.0.0")) {
+            queryAnalyzer = new Tidb4Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        } else  {
+            throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", systemConfig.getDatabaseVersion()));
+        }
 
         File retDir = new File(systemConfig.getResultDirectory()), retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
         if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
