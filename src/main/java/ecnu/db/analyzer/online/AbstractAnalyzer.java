@@ -150,6 +150,9 @@ public abstract class AbstractAnalyzer {
                 throw new TouchstoneToolChainException("join节点的左右节点已经被访问过");
             }
         } else {
+            if (node.getType() == ExecutionNode.ExecutionNodeType.join && node.getLeftNode().isVisited() && node.getRightNode().isVisited()) {
+                node.setVisited();
+            }
             // 如果遍历结束，则不需要继续遍历
             if (!constraintChain.isStop()) {
                 if (node.getType() == ExecutionNode.ExecutionNodeType.join) {
@@ -175,7 +178,7 @@ public abstract class AbstractAnalyzer {
                             if (node.getJoinTag() < 0) {
                                 node.setJoinTag(schemas.get(pkTable).getJoinTag());
                             }
-                            constraintChain.addQueryInfo("[1," + pkCol.replace(',', '#') + "," +
+                            constraintChain.addConstraint("[1," + pkCol.replace(',', '#') + "," +
                                     node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
                             //设置主键
                             schemas.get(pkTable).setPrimaryKeys(pkCol);
@@ -184,7 +187,7 @@ public abstract class AbstractAnalyzer {
                                 node.setJoinTag(schemas.get(pkTable).getJoinTag());
                             }
                             String primaryKey = fkTable + "." + fkCol;
-                            constraintChain.addQueryInfo("[2," + fkCol.replace(',', '#') + "," +
+                            constraintChain.addConstraint("[2," + fkCol.replace(',', '#') + "," +
                                     (double) node.getOutputRows() / constraintChain.getLastNodeLineCount() + "," +
                                     primaryKey.replace(',', '#') + "," +
                                     node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
@@ -194,15 +197,12 @@ public abstract class AbstractAnalyzer {
                             schemas.get(pkTable).addForeignKey(pkCol, fkTable, fkCol);
                             constraintChain.setLastNodeLineCount(node.getOutputRows());
                         }
-                        if (node.getLeftNode().isVisited() && node.getRightNode().isVisited()) {
-                            node.setVisited();
-                        }
                     }
                 } else if (node.getType() == ExecutionNode.ExecutionNodeType.filter) {
                     Pair<String, String> tableNameAndSelectCondition = analyzeSelectCondition(node.getInfo());
                     if (constraintChain.getTableName().equals(tableNameAndSelectCondition.getKey())) {
                         node.setVisited();
-                        constraintChain.addQueryInfo("[0," + tableNameAndSelectCondition.getRight() + "," +
+                        constraintChain.addConstraint("[0," + tableNameAndSelectCondition.getRight() + "," +
                                 (double) node.getOutputRows() / constraintChain.getLastNodeLineCount() + "];");
                     }
                 }
@@ -213,9 +213,13 @@ public abstract class AbstractAnalyzer {
 
     /**
      * 根据输入的列名统计非重复值的个数，进而给出该列是否为主键
-     *
-     * @param pkTable, pkCol, fkTable, fkCol
+     * @param pkTable
+     * @param pkCol
+     * @param fkTable
+     * @param fkCol
      * @return 该列是否为主键
+     * @throws TouchstoneToolChainException
+     * @throws SQLException
      */
     private boolean isPrimaryKey(String pkTable, String pkCol, String fkTable, String fkCol) throws TouchstoneToolChainException, SQLException {
         if (String.format("%s.%s", pkTable, pkCol).equals(schemas.get(fkTable).getMetaDataFks().get(fkCol))) {

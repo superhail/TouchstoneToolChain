@@ -5,6 +5,7 @@ import com.alibaba.druid.sql.SQLUtils;
 import ecnu.db.analyzer.online.AbstractAnalyzer;
 import ecnu.db.analyzer.online.ExecutionNode;
 import ecnu.db.analyzer.online.Tidb3Analyzer;
+import ecnu.db.analyzer.online.Tidb4Analyzer;
 import ecnu.db.analyzer.statical.QueryTableName;
 import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.dbconnector.TidbConnector;
@@ -14,6 +15,7 @@ import ecnu.db.schema.generation.TidbSchemaGenerator;
 import ecnu.db.utils.ReadQuery;
 import ecnu.db.utils.SystemConfig;
 import ecnu.db.utils.TouchstoneToolChainException;
+import org.apache.commons.io.FileUtils;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -154,9 +156,18 @@ public class Main {
 
         System.out.println("获取表结构和数据分布成功，开始获取query查询计划");
 
-        AbstractAnalyzer queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        AbstractAnalyzer queryAnalyzer;
+        if (systemConfig.getDatabaseVersion().equals("3.1.0")) {
+            queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        } else if (systemConfig.getDatabaseVersion().equals("4.0.0")) {
+            queryAnalyzer = new Tidb4Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        } else  {
+            throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", systemConfig.getDatabaseVersion()));
+        }
 
-        File retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
+        File retDir = new File(systemConfig.getResultDirectory()), retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
+        if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
+        if (retDir.isDirectory()) FileUtils.deleteDirectory(retDir);
         if(!retSqlDir.mkdirs()){
             throw new TouchstoneToolChainException("无法创建输出文件夹");
         }
@@ -237,7 +248,7 @@ public class Main {
                         sqlWriter.close();
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
-                        System.out.printf("%-15s Status:\u001B[31m获取失败\u001B[0m%n", queryCanonicalName);
+                        System.out.println(String.format("%-15s Status:\033[32m获取失败\033[0m", queryCanonicalName));
                         System.out.println(e.getMessage());
                         for (String[] strings : queryPlan) {
                             for (String string : strings) {

@@ -12,6 +12,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static ecnu.db.utils.CommonUtils.matchPattern;
+
 
 /**
  * @author youshuhong
@@ -20,6 +22,7 @@ public class Tidb4Analyzer extends AbstractAnalyzer {
     private static final Pattern INNER_JOIN_OUTER_KEY = Pattern.compile("outer key:.*,");
     private static final Pattern INNER_JOIN_INNER_KEY = Pattern.compile("inner key:.*");
     private static final Pattern JOIN_EQ_OPERATOR = Pattern.compile("equal:\\[.*]");
+    private static final Pattern JOIN_EQ_SUB_EXPR = Pattern.compile("eq\\(([a-zA-Z0-9\\_\\$\\.]+)\\, ([a-zA-Z0-9\\_\\$\\.]+)\\)");
     HashSet<String> readerType = new HashSet<>(Arrays.asList("TableReader", "IndexReader", "IndexLookUp"));
     HashSet<String> passNodeType = new HashSet<>(Arrays.asList("Projection", "TopN", "Sort", "HashAgg", "StreamAgg",
             "TableFullScan", "TableRowIDScan", "TableRangeScan", "IndexRangeScan", "IndexFullScan"));
@@ -54,7 +57,7 @@ public class Tidb4Analyzer extends AbstractAnalyzer {
         int lastLevel = -1, currentLevel = 0;
 
         // 解析出的节点的类别
-        String nodeType;
+        String nodeType, planId;
         String nextNodeType;
 
         for (int i = 0; i < queryPlan.size(); i++) {
@@ -63,10 +66,12 @@ public class Tidb4Analyzer extends AbstractAnalyzer {
             String[] levelAndType = subQueryPlan[0].split("─");
             //如果等于1，则为初始节点
             if (levelAndType.length == 1) {
+                planId = levelAndType[0];
                 nodeType = levelAndType[0].split("_")[0];
             } else {
                 //通过"-"前的字符判定层级
                 currentLevel = (levelAndType[0].length() - 1) / 2;
+                planId = levelAndType[1];
                 nodeType = levelAndType[1].split("_")[0];
             }
 
@@ -79,19 +84,19 @@ public class Tidb4Analyzer extends AbstractAnalyzer {
                 // 如果属于join，则记录信息
                 if (joinNodeType.contains(nodeType)) {
                     if(!subQueryPlan[3].isEmpty()) {
-                        executionNode = new ExecutionNode(ExecutionNodeType.join, rowCount, subQueryPlan[3] + "," + subQueryPlan[1]);
+                        executionNode = new ExecutionNode(planId, ExecutionNodeType.join, rowCount, subQueryPlan[3] + "," + subQueryPlan[1]);
                     }
                     else {
-                        executionNode = new ExecutionNode(ExecutionNodeType.join, rowCount, subQueryPlan[1]);
+                        executionNode = new ExecutionNode(planId, ExecutionNodeType.join, rowCount, subQueryPlan[1]);
                     }
                 }
                 // 如果过滤节点，记录信息
                 else if (filterNodeType.contains(nodeType)) {
                     if(!subQueryPlan[3].isEmpty()) {
-                        executionNode = new ExecutionNode(ExecutionNodeType.filter, rowCount, subQueryPlan[3] + "," + subQueryPlan[1]);
+                        executionNode = new ExecutionNode(planId, ExecutionNodeType.filter, rowCount, subQueryPlan[3] + "," + subQueryPlan[1]);
                     }
                     else{
-                        executionNode = new ExecutionNode(ExecutionNodeType.filter, rowCount, subQueryPlan[1]);
+                        executionNode = new ExecutionNode(planId, ExecutionNodeType.filter, rowCount, subQueryPlan[1]);
                     }
                     //跳过下层的table scan
                     if (readerType.contains(queryPlan.get(i + 1)[0].split("─")[1].split("_")[0])) {
@@ -126,18 +131,18 @@ public class Tidb4Analyzer extends AbstractAnalyzer {
                     //判断下一层是不是selection,如果下一层是selection, 则跳过下层的table scan操作
                     if (filterNodeType.contains(queryPlan.get(i)[0].split("─")[1].split("_")[0])) {
                         if(!queryPlan.get(i)[3].isEmpty()) {
-                            executionNode = new ExecutionNode(ExecutionNodeType.filter, queryPlan.get(i)[3] + "," + queryPlan.get(i)[1]);
+                            executionNode = new ExecutionNode(planId, ExecutionNodeType.filter, queryPlan.get(i)[3] + "," + queryPlan.get(i)[1]);
                         }
                         else{
-                            executionNode = new ExecutionNode(ExecutionNodeType.filter, queryPlan.get(i)[1]);
+                            executionNode = new ExecutionNode(planId, ExecutionNodeType.filter, queryPlan.get(i)[1]);
                         }
                         i++;
                     } else {
                         if(!queryPlan.get(i)[3].isEmpty()) {
-                            executionNode = new ExecutionNode(ExecutionNodeType.scan, queryPlan.get(i)[3] + "," + queryPlan.get(i)[1]);
+                            executionNode = new ExecutionNode(planId, ExecutionNodeType.scan, queryPlan.get(i)[3] + "," + queryPlan.get(i)[1]);
                         }
                         else{
-                            executionNode = new ExecutionNode(ExecutionNodeType.scan, queryPlan.get(i)[1]);
+                            executionNode = new ExecutionNode(planId, ExecutionNodeType.scan, queryPlan.get(i)[1]);
                         }
                     }
                 }
@@ -192,32 +197,34 @@ public class Tidb4Analyzer extends AbstractAnalyzer {
             throw new TouchstoneToolChainException("join中包含其他条件,暂不支持");
         }
         String[] result = new String[4];
+        String leftTable, leftCol, rightTable, rightCol;
         Matcher eqCondition = JOIN_EQ_OPERATOR.matcher(joinInfo);
         if (eqCondition.find()) {
             if (eqCondition.groupCount() > 1) {
                 throw new UnsupportedOperationException();
             }
             String[] eqInfos = eqCondition.group(0).substring(0, eqCondition.group(0).length() - 1).split("eq\\(");
-            boolean multiTables = false;
-            for (int i = 1; i < eqInfos.length; i++) {
-                String eqInfo = eqInfos[i];
-                String[] joinInfos = eqInfo.split(",");
-                String[] leftJoinInfos = joinInfos[0].split("\\.");
-                String[] rightJoinInfos = joinInfos[1].split("\\.");
-                if (!multiTables) {
-                    result[0] = leftJoinInfos[1];
-                    result[1] = leftJoinInfos[2];
-                    result[2] = rightJoinInfos[1];
-                    result[3] = rightJoinInfos[2];
-                } else {
-                    if (!result[0].equals(leftJoinInfos[1]) || !result[2].equals(rightJoinInfos[1])) {
-                        throw new TouchstoneToolChainException("join中包含多个表的约束,暂不支持");
-                    }
-                    result[1] += "," + leftJoinInfos[2];
-                    result[3] += "," + rightJoinInfos[2];
+            List<List<String>> matches = matchPattern(JOIN_EQ_SUB_EXPR, joinInfo);
+            String[] leftJoinInfos = matches.get(0).get(1).split("\\."), rightJoinInfos = matches.get(0).get(2).split("\\.");
+            leftTable = leftJoinInfos[1];
+            rightTable = rightJoinInfos[1];
+            List<String> leftCols = new ArrayList<>(), rightCols = new ArrayList<>();
+            for (List<String> match: matches) {
+                leftJoinInfos = match.get(1).split("\\.");
+                rightJoinInfos = match.get(2).split("\\.");
+                String currLeftTable = leftJoinInfos[1], currLeftCol = leftJoinInfos[2], currRightTable = rightJoinInfos[1], currRightCol = rightJoinInfos[2];
+                if (!leftTable.equals(currLeftTable) || !rightTable.equals(currRightTable)) {
+                    throw new TouchstoneToolChainException("join中包含多个表的约束,暂不支持");
                 }
-                multiTables = true;
+                leftCols.add(currLeftCol);
+                rightCols.add(currRightCol);
             }
+            leftCol = String.join(",", leftCols);
+            rightCol = String.join(",", rightCols);
+            result[0] = leftTable;
+            result[1] = leftCol;
+            result[2] = rightTable;
+            result[3] = rightCol;
         } else {
             Matcher innerInfo = INNER_JOIN_INNER_KEY.matcher(joinInfo);
             if (innerInfo.find()) {

@@ -120,7 +120,8 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
     "databasePort": "4000",
     "databasePwd": "",
     "databaseUser": "root",
-    "databaseVersion": "tidb",
+    "dataSource": "tidb",
+    "databaseVersion": "3.1.0",
     "sqlsDirectory": "conf/sqls",
     "resultDirectory": "touchstoneconf",
     "typeConvert": {
@@ -159,7 +160,7 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
 
 + 数据库信息。按照配置文件顺序主要需要配置的字段有，待采集数据库的ip，数据库name，数据库端口，密码和用户名。
 
-+ 数据库版本。配置用于采集信息的数据库类型
++ 数据源与数据库版本。配置用于采集信息的数据库类型和版本，如上的tidb v3.1.0
 
 + 文件夹路径
 
@@ -203,14 +204,14 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
 
 ## 联系我们
 
-研发团队：华东师范大学数据科学与工程学院 数据库项目组。
+研发团队：华东师范大学数据科学与工程学院 DBHammer数据库项目组。
 
-该工作的主要成员：张蓉 教授，王清帅 在读博士，游舒泓。
+该工作的主要成员：张蓉 教授，王清帅 在读博士，游舒泓，连薛超。
 
 地址：上海市普陀区中山北路3663号。
 
 邮政编码：200062。
 
-联系邮箱：52194501004@stu.ecnu.edu.cn。
+联系邮箱：qswang@stu.ecnu.edu.cn。
 
 对于文档内容和实现源码有任何疑问，可通过发起issue或发送邮件与我们联系，我们收到后将尽快给您反馈。
