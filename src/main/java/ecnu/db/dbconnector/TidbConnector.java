@@ -10,6 +10,9 @@ import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * @author wangqingshuai
+ */
 public class TidbConnector extends AbstractDbConnector {
     String statsUrl;
 

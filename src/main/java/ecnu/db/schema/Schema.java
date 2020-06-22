@@ -1,6 +1,5 @@
 package ecnu.db.schema;
 
-import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.schema.column.AbstractColumn;
 import ecnu.db.schema.column.ColumnType;
 import ecnu.db.utils.TouchstoneToolChainException;
@@ -31,10 +30,6 @@ public class Schema {
         lastJoinTag = 1;
     }
 
-    public HashMap<String, AbstractColumn> getColumns() {
-        return columns;
-    }
-
     /**
      * 判定给定的表格是否满足全局拓扑序
      *
@@ -58,6 +53,36 @@ public class Schema {
     }
 
     /**
+     * 初始化Schema.foreignKeys和Schema.metaDataFks
+     *
+     * @param metaData 数据库的元信息
+     * @param schemas  需要初始化的表
+     * @throws SQLException
+     * @throws TouchstoneToolChainException
+     */
+    public static void initFks(DatabaseMetaData metaData, HashMap<String, Schema> schemas) throws SQLException, TouchstoneToolChainException {
+        for (Map.Entry<String, Schema> entry : schemas.entrySet()) {
+            String tableName = entry.getKey();
+            ResultSet rs = metaData.getImportedKeys(null, null, tableName);
+            while (rs.next()) {
+                String pkTable = rs.getString("PKTABLE_NAME"), pkCol = rs.getString("PKCOLUMN_NAME"),
+                        fkTable = rs.getString("FKTABLE_NAME"), fkCol = rs.getString("FKCOLUMN_NAME");
+                schemas.get(fkTable).addForeignKey(fkCol, pkTable, pkCol);
+            }
+        }
+
+        for (Map.Entry<String, Schema> entry : schemas.entrySet()) {
+            Schema schema = entry.getValue();
+            HashMap<String, String> fks = Optional.ofNullable(schema.getForeignKeys()).orElse(new HashMap<>());
+            schema.setMetaDataFks(fks);
+        }
+    }
+
+    public HashMap<String, AbstractColumn> getColumns() {
+        return columns;
+    }
+
+    /**
      * 判断本表是否只依赖于这些表，用于确定是否存在全局拓扑序
      *
      * @param tableNames 已经确定存在拓扑序的表格
@@ -66,37 +91,12 @@ public class Schema {
     public boolean onlyReferencingTables(HashSet<String> tableNames) {
         if (foreignKeys != null) {
             for (String referencingTableInfo : foreignKeys.values()) {
-                if (!tableNames.contains(referencingTableInfo.split(".")[0])) {
+                if (!tableNames.contains(referencingTableInfo.split("\\.")[0])) {
                     return false;
                 }
             }
         }
         return true;
-    }
-
-    /**
-     * 初始化Schema.foreignKeys和Schema.metaDataFks
-     * @param metaData 数据库的元信息
-     * @param schemas 需要初始化的表
-     * @throws SQLException
-     * @throws TouchstoneToolChainException
-     */
-    public static void initFks(DatabaseMetaData metaData, HashMap<String, Schema> schemas) throws SQLException, TouchstoneToolChainException {
-        for (Map.Entry<String, Schema> entry: schemas.entrySet()) {
-            String tableName = entry.getKey();
-            ResultSet rs = metaData.getImportedKeys(null, null, tableName);
-            while(rs.next()) {
-                String pkTable = rs.getString("PKTABLE_NAME"), pkCol = rs.getString("PKCOLUMN_NAME"),
-                        fkTable = rs.getString("FKTABLE_NAME"), fkCol = rs.getString("FKCOLUMN_NAME");
-                schemas.get(fkTable).addForeignKey(fkCol, pkTable, pkCol);
-            }
-        }
-
-        for (Map.Entry<String, Schema> entry: schemas.entrySet()) {
-            Schema schema = entry.getValue();
-            HashMap<String, String> fks = Optional.ofNullable(schema.getForeignKeys()).orElse(new HashMap<>());
-            schema.setMetaDataFks(fks);
-        }
     }
 
     public int getJoinTag() {

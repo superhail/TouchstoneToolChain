@@ -23,7 +23,7 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
     HashSet<String> passNodeTypes = new HashSet<>(Arrays.asList("Projection", "TopN", "Sort", "HashAgg", "StreamAgg", "IndexScan"));
     HashSet<String> joinNodeTypes = new HashSet<>(Arrays.asList("HashRightJoin", "HashLeftJoin", "IndexMergeJoin", "IndexHashJoin", "IndexJoin", "MergeJoin"));
     HashSet<String> filterNodeTypes = new HashSet<>(Collections.singletonList("Selection"));
-    HashSet<String> scanNodeTypes = new HashSet<>(Arrays.asList("TableScan"));
+    HashSet<String> scanNodeTypes = new HashSet<>(Collections.singletonList("TableScan"));
     HashMap<String, String> tidbSelectArgs;
 
 
@@ -46,44 +46,54 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
     @Override
     public ExecutionNode getExecutionTree(List<String[]> queryPlan) throws TouchstoneToolChainException {
         RawNode rawNodeRoot = buildRawNodeTree(queryPlan);
-        ExecutionNode root = buildExecutionTree(rawNodeRoot);
-
-        return root;
+        return buildExecutionTree(rawNodeRoot);
     }
 
     /**
      * 合并节点，删除query plan中不需要或者不支持的节点，并根据节点类型提取对应信息
+     *
      * @param rawNode 需要处理的query plan树
      * @return 处理好的树
-     * @throws TouchstoneToolChainException
+     * @throws TouchstoneToolChainException 构建查询树失败
      */
     private ExecutionNode buildExecutionTree(RawNode rawNode) throws TouchstoneToolChainException {
         argsAndIndex.clear();                                                                       //清空参数和位置的对应关系
-        if (rawNode == null) return null;
+        if (rawNode == null) {
+            return null;
+        }
         String[] subQueryPlan = rawNode.data;
-        String planId = subQueryPlan[0], operatorInfo = subQueryPlan[1],executionInfo = subQueryPlan[2];
-        planId = extractPattern(PLAN_ID, planId);
+        String planId = subQueryPlan[0], operatorInfo = subQueryPlan[1], executionInfo = subQueryPlan[2];
+        planId = extractPattern(planId);
         Matcher matcher;
         String nodeType = rawNode.nodeType;
-        if (passNodeTypes.contains(nodeType)) return rawNode.left == null ? null: buildExecutionTree(rawNode.left);
+        if (passNodeTypes.contains(nodeType)) {
+            return rawNode.left == null ? null : buildExecutionTree(rawNode.left);
+        }
         int rowCount = (matcher = ROW_COUNTS.matcher(executionInfo)).find() ?
                 Integer.parseInt(matcher.group(0).split(":")[1]) : 0;
-        ExecutionNode node = null;
-        if (scanNodeTypes.contains(nodeType)) {                                                      // 处理底层的TableScan
+        ExecutionNode node;
+        // 处理底层的TableScan
+        if (scanNodeTypes.contains(nodeType)) {
             return new ExecutionNode(planId, ExecutionNodeType.scan, rowCount, operatorInfo);
         } else if (filterNodeTypes.contains(nodeType)) {
             node = new ExecutionNode(planId, ExecutionNodeType.filter, rowCount, operatorInfo);
-            if (rawNode.left != null && scanNodeTypes.contains(rawNode.left.nodeType)) return node;  // 跳过底部的TableScan
-            node.leftNode = rawNode.left == null ? null: buildExecutionTree(rawNode.left);
-            node.rightNode = rawNode.right == null ? null: buildExecutionTree(rawNode.right);
+            // 跳过底部的TableScan
+            if (rawNode.left != null && scanNodeTypes.contains(rawNode.left.nodeType)) {
+                return node;
+            }
+            node.leftNode = rawNode.left == null ? null : buildExecutionTree(rawNode.left);
+            node.rightNode = rawNode.right == null ? null : buildExecutionTree(rawNode.right);
         } else if (joinNodeTypes.contains(nodeType)) {
             node = new ExecutionNode(planId, ExecutionNodeType.join, rowCount, operatorInfo);
-            node.leftNode = rawNode.left == null ? null: buildExecutionTree(rawNode.left);
-            node.rightNode = rawNode.right == null ? null: buildExecutionTree(rawNode.right);
+            node.leftNode = rawNode.left == null ? null : buildExecutionTree(rawNode.left);
+            node.rightNode = rawNode.right == null ? null : buildExecutionTree(rawNode.right);
         } else if (readerNodeTypes.contains(nodeType)) {
-            if (rawNode.right != null && !passNodeTypes.contains(rawNode.right.nodeType)) {         // 右侧节点非空且不属于跳过的节点，跳过左侧节点
+            // 右侧节点非空且不属于跳过的节点，跳过左侧节点
+            if (rawNode.right != null && !passNodeTypes.contains(rawNode.right.nodeType)) {
                 return buildExecutionTree(rawNode.right);
-            } else if ("IndexScan".equals(rawNode.left.nodeType)) {                                 // 处理IndexReader后接一个IndexScan的情况
+            }
+            // 处理IndexReader后接一个IndexScan的情况
+            else if ("IndexScan".equals(rawNode.left.nodeType)) {
                 return new ExecutionNode(planId, ExecutionNodeType.scan, rowCount, rawNode.left.data[1]);
             }
             node = buildExecutionTree(rawNode.left);
@@ -93,8 +103,8 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         return node;
     }
 
-    private String extractPattern(Pattern pattern, String planId) {
-        Matcher matcher = pattern.matcher(planId);
+    private String extractPattern(String planId) {
+        Matcher matcher = Tidb3Analyzer.PLAN_ID.matcher(planId);
         boolean found = matcher.find();
         assert found;
         return matcher.group(0);
@@ -102,20 +112,23 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
 
     /**
      * 根据explain analyze的结果生成query plan树
+     *
      * @param queryPlan explain analyze的结果
      * @return 生成好的树
      */
     private RawNode buildRawNodeTree(List<String[]> queryPlan) {
         Stack<Pair<Integer, RawNode>> pStack = new Stack<>();
-        String nodeType = extractPattern(PLAN_ID, queryPlan.get(0)[0]).split("_")[0];
+        String nodeType = extractPattern(queryPlan.get(0)[0]).split("_")[0];
         RawNode rawNodeRoot = new RawNode(null, null, nodeType, queryPlan.get(0)), rawNode;
         pStack.push(Pair.of(0, rawNodeRoot));
-        for (String[] subQueryPlan: queryPlan.subList(1, queryPlan.size())) {
-            nodeType = extractPattern(PLAN_ID, subQueryPlan[0]).split("_")[0];
+        for (String[] subQueryPlan : queryPlan.subList(1, queryPlan.size())) {
+            nodeType = extractPattern(subQueryPlan[0]).split("_")[0];
             rawNode = new RawNode(null, null, nodeType, subQueryPlan);
             String planId = subQueryPlan[0];
             int level = (planId.split("─")[0].length() + 1) / 2;
-            while (pStack.peek().getKey() > level) pStack.pop(); // pop直到找到同一个层级的节点
+            while (pStack.peek().getKey() > level) {
+                pStack.pop(); // pop直到找到同一个层级的节点
+            }
             if (pStack.peek().getKey().equals(level)) {
                 pStack.pop();
                 pStack.peek().getValue().right = rawNode;
@@ -126,6 +139,7 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         }
         return rawNodeRoot;
     }
+
     /**
      * 分析join信息
      *
@@ -152,6 +166,7 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
                 String[] leftJoinInfos = joinInfos[0].split("\\.");
                 String[] rightJoinInfos = joinInfos[1].split("\\.");
                 if (!multiTables) {
+                    //todo result 重命名为有实际意义的参数
                     result[0] = leftJoinInfos[1];
                     result[1] = leftJoinInfos[2];
                     result[2] = rightJoinInfos[1];

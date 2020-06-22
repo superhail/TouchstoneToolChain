@@ -12,6 +12,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * @author wangqingshuai
+ */
 public abstract class AbstractAnalyzer {
     protected AbstractDbConnector dbConnector;
     protected Map<String, String> aliasDic;
@@ -29,6 +32,10 @@ public abstract class AbstractAnalyzer {
 
     abstract String[] getSqlInfoColumns();
 
+    /**
+     * 获取数据库使用的静态解析器的数据类型
+     * @return 静态解析器使用的数据库类型
+     */
     public abstract String getDbType();
 
     /**
@@ -55,6 +62,7 @@ public abstract class AbstractAnalyzer {
      *
      * @param selectCondition 传入的select条件语句
      * @return 表名和格式化后的condition
+     * @throws TouchstoneToolChainException select条件无法解析
      */
     abstract Pair<String, String> analyzeSelectCondition(String selectCondition) throws TouchstoneToolChainException;
 
@@ -190,7 +198,7 @@ public abstract class AbstractAnalyzer {
                             node.setVisited();
                         }
                     }
-                } else if (node.getType() == ExecutionNode.ExecutionNodeType.filter){
+                } else if (node.getType() == ExecutionNode.ExecutionNodeType.filter) {
                     Pair<String, String> tableNameAndSelectCondition = analyzeSelectCondition(node.getInfo());
                     if (constraintChain.getTableName().equals(tableNameAndSelectCondition.getKey())) {
                         node.setVisited();
@@ -210,8 +218,12 @@ public abstract class AbstractAnalyzer {
      * @return 该列是否为主键
      */
     private boolean isPrimaryKey(String pkTable, String pkCol, String fkTable, String fkCol) throws TouchstoneToolChainException, SQLException {
-        if (String.format("%s.%s", pkTable, pkCol).equals(schemas.get(fkTable).getMetaDataFks().get(fkCol))) return true;
-        if (String.format("%s.%s", fkTable, fkCol).equals(schemas.get(pkTable).getMetaDataFks().get(pkCol))) return false;
+        if (String.format("%s.%s", pkTable, pkCol).equals(schemas.get(fkTable).getMetaDataFks().get(fkCol))) {
+            return true;
+        }
+        if (String.format("%s.%s", fkTable, fkCol).equals(schemas.get(pkTable).getMetaDataFks().get(pkCol))) {
+            return false;
+        }
         if (!pkCol.contains(",")) {
             if (schemas.get(pkTable).getNdv(pkCol) == schemas.get(fkTable).getNdv(fkCol)) {
                 return schemas.get(pkTable).getTableSize() < schemas.get(fkTable).getTableSize();

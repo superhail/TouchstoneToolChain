@@ -1,5 +1,8 @@
 package ecnu.db.analyzer.online;
 
+/**
+ * @author lianxuechao
+ */
 public class QueryInfo {
     String data;
     String tableName;

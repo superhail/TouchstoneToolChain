@@ -1,6 +1,6 @@
 {
-  "databaseIp": "127.0.0.1",
-  "crossMultiDatabase": true,
+  "databaseIp": "10.11.6.20",
+  "crossMultiDatabase": false,
   "databasePort": "4000",
   "databasePwd": "",
   "databaseUser": "root",

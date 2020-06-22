@@ -14,7 +14,6 @@ import ecnu.db.schema.generation.TidbSchemaGenerator;
 import ecnu.db.utils.ReadQuery;
 import ecnu.db.utils.SystemConfig;
 import ecnu.db.utils.TouchstoneToolChainException;
-import org.apache.commons.io.FileUtils;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -24,15 +23,18 @@ import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.*;
 
+/**
+ * @author wangqingshuai
+ */
 public class Main {
 
     public static String changeSql(String sql, HashMap<String, List<String>> argsAndIndex, ArrayList<String> cannotFindArgs,
                                    ArrayList<String> conflictArgs) throws TouchstoneToolChainException {
         HashSet<String> stopSqlSwap = new HashSet<>(Arrays.asList("and", "limit", "group", ")"));
         for (Map.Entry<String, List<String>> argAndIndexes : argsAndIndex.entrySet()) {
+            int lastIndex = 0;
+            int count = 0;
             if (argAndIndexes.getKey().contains("in(")) {
-                int lastIndex = 0;
-                int count = 0;
                 while (lastIndex != -1) {
                     lastIndex = sql.indexOf("in (", lastIndex);
                     if (lastIndex != -1) {
@@ -48,8 +50,6 @@ public class Main {
                     sql = sql.substring(0, sql.indexOf("in (") + "in ".length()) + argAndIndexes.getValue().get(0) + backString;
                 }
             } else {
-                int lastIndex = 0;
-                int count = 0;
                 while (lastIndex != -1) {
                     lastIndex = sql.indexOf(argAndIndexes.getKey(), lastIndex);
                     if (lastIndex != -1) {
@@ -125,8 +125,8 @@ public class Main {
             HashSet<String> tableNameSet = new HashSet<>();
             for (File sqlFile : files) {
                 if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
-                    List<String> sqls = ReadQuery.getSQLsFromFile(sqlFile.getPath(), "mysql");
-                    for (String sql : sqls) {
+                    List<String> queries = ReadQuery.getSQLsFromFile(sqlFile.getPath(), "mysql");
+                    for (String sql : queries) {
                         tableNameSet.addAll(QueryTableName.getTableName(sql, "mysql"));
                     }
                 }
@@ -141,7 +141,7 @@ public class Main {
         for (String tableName : tableNames) {
             System.out.println("开始获取" + tableName + "的信息");
             System.out.print("获取表结构...");
-            Schema schema = dbSchemaGenerator.generateSchemaNoKeys(tableName, dbConnector.getTableDDL(tableName));
+            Schema schema = dbSchemaGenerator.generateSchemaNoKeys(tableName, dbConnector.getTableDdl(tableName));
             System.out.println("成功");
             System.out.print("获取表数据分布...");
             dbSchemaGenerator.setDataRangeBySqlResult(schema.getAllColumns(), dbConnector.getDataRange(tableName,
@@ -156,20 +156,20 @@ public class Main {
 
         AbstractAnalyzer queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
 
-        File retDir = new File(systemConfig.getResultDirectory()), retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
-        if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
-        if (retDir.isDirectory()) FileUtils.deleteDirectory(retDir);
-        retSqlDir.mkdirs();
+        File retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
+        if(!retSqlDir.mkdirs()){
+            throw new TouchstoneToolChainException("无法创建输出文件夹");
+        }
 
         List<String> queryInfos = new LinkedList<>();
         for (File sqlFile : files) {
             if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
-                List<String> sqls = ReadQuery.getSQLsFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
+                List<String> queries = ReadQuery.getSQLsFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
                 int index = 0;
                 BufferedWriter sqlWriter = new BufferedWriter(new FileWriter(
                         new File(retSqlDir.getPath() + "/" + sqlFile.getName())));
                 List<String[]> queryPlan = new ArrayList<>();
-                for (String sql : sqls) {
+                for (String sql : queries) {
                     index++;
                     String queryCanonicalName = String.format("%s_%d", sqlFile.getName(), index);
                     try {
@@ -183,7 +183,7 @@ public class Main {
                         ArrayList<String> cannotFindArgs = new ArrayList<>();
                         ArrayList<String> conflictArgs = new ArrayList<>();
                         sql = changeSql(sql, queryAnalyzer.getArgsAndIndex(), cannotFindArgs, conflictArgs);
-                        ArrayList<String> reproductArgs = new ArrayList<>();
+                        ArrayList<String> reProductArgs = new ArrayList<>();
 
                         for (String cannotFindArg : cannotFindArgs) {
                             if (cannotFindArg.contains(" bet")) {
@@ -211,10 +211,10 @@ public class Main {
                                     tempInfo.put(cannotFindArg.split(" ")[0] + " <", Collections.singletonList(indexInfos[3]));
                                     sql = changeSql(sql, tempInfo, tempList, new ArrayList<>());
                                 }
-                                reproductArgs.add(cannotFindArg);
+                                reProductArgs.add(cannotFindArg);
                             }
                         }
-                        cannotFindArgs.removeAll(reproductArgs);
+                        cannotFindArgs.removeAll(reProductArgs);
                         if (cannotFindArgs.size() > 0) {
 
                             outputMessage += String.format("\033[31m  请注意%s中有参数无法完成替换，请查看该sql输出，手动替换;\033[0m", queryCanonicalName);
@@ -237,7 +237,7 @@ public class Main {
                         sqlWriter.close();
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
-                        System.out.println(String.format("%-15s Status:\033[31m获取失败\033[0m", queryCanonicalName));
+                        System.out.printf("%-15s Status:\u001B[31m获取失败\u001B[0m%n", queryCanonicalName);
                         System.out.println(e.getMessage());
                         for (String[] strings : queryPlan) {
                             for (String string : strings) {
@@ -256,8 +256,12 @@ public class Main {
                 new File(writeDirectory.getPath() + "/schema.conf")));
         for (Schema schema : schemas.values()) {
             String schemaInfo = schema.formatSchemaInfo(), dataDistributionInfo = schema.formatDataDistributionInfo();
-            if (schemaInfo != null) schemaWriter.write(schemaInfo + "\n");
-            if (dataDistributionInfo != null) schemaWriter.write(dataDistributionInfo + "\n");
+            if (schemaInfo != null) {
+                schemaWriter.write(schemaInfo + "\n");
+            }
+            if (dataDistributionInfo != null) {
+                schemaWriter.write(dataDistributionInfo + "\n");
+            }
         }
         schemaWriter.close();
         BufferedWriter ccWriter = new BufferedWriter(new FileWriter(

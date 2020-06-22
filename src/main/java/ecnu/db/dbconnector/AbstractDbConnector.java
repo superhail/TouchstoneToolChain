@@ -11,12 +11,11 @@ import java.util.ArrayList;
  * 数据库驱动连接器
  */
 public abstract class AbstractDbConnector {
+    public DatabaseMetaData databaseMetaData;
     /**
      * JDBC 驱动名及数据库 URL
      */
     protected Statement stmt;
-
-    public DatabaseMetaData databaseMetaData;
 
     AbstractDbConnector(SystemConfig config) throws TouchstoneToolChainException {
         // 数据库的用户名与密码
@@ -38,6 +37,10 @@ public abstract class AbstractDbConnector {
 
     abstract String dbUrl(SystemConfig config);
 
+    /**
+     * 获取在数据库中出现的表名
+     * @return 所有表名
+     */
     abstract String abstractGetTableNames();
 
     abstract String abstractGetCreateTableSql(String tableName);
@@ -51,7 +54,7 @@ public abstract class AbstractDbConnector {
         return tables;
     }
 
-    public String getTableDDL(String tableName) throws SQLException {
+    public String getTableDdl(String tableName) throws SQLException {
         ResultSet rs = stmt.executeQuery(abstractGetCreateTableSql(tableName));
         rs.next();
         return rs.getString(2).trim().toLowerCase();

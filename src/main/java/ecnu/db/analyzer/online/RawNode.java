@@ -2,6 +2,9 @@ package ecnu.db.analyzer.online;
 
 import java.util.Arrays;
 
+/**
+ * @author lianxuechao
+ */
 public class RawNode {
     public RawNode left;
     public RawNode right;

@@ -8,6 +8,9 @@ import com.alibaba.druid.stat.TableStat;
 import java.util.HashSet;
 import java.util.List;
 
+/**
+ * @author wangqingshuai
+ */
 public class QueryTableName {
     public static HashSet<String> getTableName(String sql, String dbType) {
         List<SQLStatement> stmtList = SQLUtils.parseStatements(sql, dbType);
