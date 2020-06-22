@@ -5,6 +5,7 @@ TouchstoneToolChain是一款数据库信息采集工具，负责收集数据库�
 当前支持数据库：
 
 + TiDB 3.*
++ TiDB 4.*
 
 ## 简介
 
