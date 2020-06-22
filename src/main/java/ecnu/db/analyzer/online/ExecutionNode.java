@@ -137,6 +137,7 @@ public class ExecutionNode {
     public String toString() {
         return "ExecutionNode{" +
                 "id='" + id + '\'' +
+                ", visited=" + visited +
                 '}';
     }
 }

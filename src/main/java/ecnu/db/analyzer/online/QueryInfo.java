@@ -25,7 +25,7 @@ public class QueryInfo {
         return data;
     }
 
-    public void addQueryInfo(String data) {
+    public void addConstraint(String data) {
         this.data += data;
     }
 
@@ -43,5 +43,14 @@ public class QueryInfo {
 
     public void setStop() {
         this.stop = true;
+    }
+
+    @Override
+    public String toString() {
+        return "QueryInfo{" +
+                "data='" + data + '\'' +
+                ", tableName='" + tableName + '\'' +
+                ", stop=" + stop +
+                '}';
     }
 }

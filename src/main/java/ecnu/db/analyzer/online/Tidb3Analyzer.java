@@ -12,13 +12,18 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static ecnu.db.utils.CommonUtils.matchPattern;
 
+/**
+ * @author qingshuai.wang
+ */
 public class Tidb3Analyzer extends AbstractAnalyzer {
     private static final Pattern ROW_COUNTS = Pattern.compile("rows:[0-9]*");
     private static final Pattern INNER_JOIN_OUTER_KEY = Pattern.compile("outer key:.*,");
     private static final Pattern INNER_JOIN_INNER_KEY = Pattern.compile("inner key:.*");
     private static final Pattern JOIN_EQ_OPERATOR = Pattern.compile("equal:\\[.*]");
     private static final Pattern PLAN_ID = Pattern.compile("([a-zA-Z]+_[0-9]+)");
+    private static final Pattern JOIN_EQ_SUB_EXPR = Pattern.compile("eq\\(([a-zA-Z0-9\\_\\$\\.]+)\\, ([a-zA-Z0-9\\_\\$\\.]+)\\)");
     HashSet<String> readerNodeTypes = new HashSet<>(Arrays.asList("TableReader", "IndexReader", "IndexLookUp"));
     HashSet<String> passNodeTypes = new HashSet<>(Arrays.asList("Projection", "TopN", "Sort", "HashAgg", "StreamAgg", "IndexScan"));
     HashSet<String> joinNodeTypes = new HashSet<>(Arrays.asList("HashRightJoin", "HashLeftJoin", "IndexMergeJoin", "IndexHashJoin", "IndexJoin", "MergeJoin"));
@@ -63,7 +68,7 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         }
         String[] subQueryPlan = rawNode.data;
         String planId = subQueryPlan[0], operatorInfo = subQueryPlan[1], executionInfo = subQueryPlan[2];
-        planId = extractPattern(PLAN_ID, planId);
+        planId = matchPattern(PLAN_ID, planId).get(0).get(0);
         Matcher matcher;
         String nodeType = rawNode.nodeType;
         if (passNodeTypes.contains(nodeType)) {
@@ -103,13 +108,6 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         return node;
     }
 
-    private String extractPattern(Pattern pattern, String planId) {
-        Matcher matcher = pattern.matcher(planId);
-        boolean found = matcher.find();
-        assert found;
-        return matcher.group(0);
-    }
-
     /**
      * 根据explain analyze的结果生成query plan树
      *
@@ -118,11 +116,13 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
      */
     private RawNode buildRawNodeTree(List<String[]> queryPlan) {
         Stack<Pair<Integer, RawNode>> pStack = new Stack<>();
-        String nodeType = extractPattern(PLAN_ID, queryPlan.get(0)[0]).split("_")[0];
+        List<List<String>> matches = matchPattern(PLAN_ID, queryPlan.get(0)[0]);
+        String nodeType = matches.get(0).get(0).split("_")[0];
         RawNode rawNodeRoot = new RawNode(null, null, nodeType, queryPlan.get(0)), rawNode;
         pStack.push(Pair.of(0, rawNodeRoot));
         for (String[] subQueryPlan : queryPlan.subList(1, queryPlan.size())) {
-            nodeType = extractPattern(PLAN_ID, subQueryPlan[0]).split("_")[0];
+            matches = matchPattern(PLAN_ID, subQueryPlan[0]);
+            nodeType = matches.get(0).get(0).split("_")[0];
             rawNode = new RawNode(null, null, nodeType, subQueryPlan);
             String planId = subQueryPlan[0];
             int level = (planId.split("─")[0].length() + 1) / 2;
@@ -154,33 +154,34 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
             throw new TouchstoneToolChainException("join中包含其他条件,暂不支持");
         }
         String[] result = new String[4];
+        String leftTable, leftCol, rightTable, rightCol;
         Matcher eqCondition = JOIN_EQ_OPERATOR.matcher(joinInfo);
         if (eqCondition.find()) {
             if (eqCondition.groupCount() > 1) {
                 throw new UnsupportedOperationException();
             }
             String[] eqInfos = eqCondition.group(0).substring(0, eqCondition.group(0).length() - 1).split("eq\\(");
-            boolean multiTables = false;
-            for (int i = 1; i < eqInfos.length; i++) {
-                String eqInfo = eqInfos[i];
-                String[] joinInfos = eqInfo.split(",");
-                String[] leftJoinInfos = joinInfos[0].split("\\.");
-                String[] rightJoinInfos = joinInfos[1].split("\\.");
-                if (!multiTables) {
-                    //todo result 重命名为有实际意义的参数
-                    result[0] = leftJoinInfos[1];
-                    result[1] = leftJoinInfos[2];
-                    result[2] = rightJoinInfos[1];
-                    result[3] = rightJoinInfos[2];
-                } else {
-                    if (!result[0].equals(leftJoinInfos[1]) || !result[2].equals(rightJoinInfos[1])) {
-                        throw new TouchstoneToolChainException("join中包含多个表的约束,暂不支持");
-                    }
-                    result[1] += "," + leftJoinInfos[2];
-                    result[3] += "," + rightJoinInfos[2];
+            List<List<String>> matches = matchPattern(JOIN_EQ_SUB_EXPR, joinInfo);
+            String[] leftJoinInfos = matches.get(0).get(1).split("\\."), rightJoinInfos = matches.get(0).get(2).split("\\.");
+            leftTable = leftJoinInfos[1];
+            rightTable = rightJoinInfos[1];
+            List<String> leftCols = new ArrayList<>(), rightCols = new ArrayList<>();
+            for (List<String> match: matches) {
+                leftJoinInfos = match.get(1).split("\\.");
+                rightJoinInfos = match.get(2).split("\\.");
+                String currLeftTable = leftJoinInfos[1], currLeftCol = leftJoinInfos[2], currRightTable = rightJoinInfos[1], currRightCol = rightJoinInfos[2];
+                if (!leftTable.equals(currLeftTable) || !rightTable.equals(currRightTable)) {
+                    throw new TouchstoneToolChainException("join中包含多个表的约束,暂不支持");
                 }
-                multiTables = true;
+                leftCols.add(currLeftCol);
+                rightCols.add(currRightCol);
             }
+            leftCol = String.join(",", leftCols);
+            rightCol = String.join(",", rightCols);
+            result[0] = leftTable;
+            result[1] = leftCol;
+            result[2] = rightTable;
+            result[3] = rightCol;
         } else {
             Matcher innerInfo = INNER_JOIN_INNER_KEY.matcher(joinInfo);
             if (innerInfo.find()) {
