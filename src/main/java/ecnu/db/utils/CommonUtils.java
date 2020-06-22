@@ -13,7 +13,7 @@ public class CommonUtils {
      * 获取正则表达式的匹配
      * @param pattern
      * @param planId
-     * @return 成功的匹配
+     * @return 成功的所有匹配，一个{@code List<String>}对应一个匹配的所有group
      */
     public static List<List<String>> matchPattern(Pattern pattern, String planId) {
         Matcher matcher = pattern.matcher(planId);
