@@ -14,14 +14,16 @@ import java.util.*;
  * @author wangqingshuai
  */
 public class Schema {
-    private final String tableName;
-    private final HashMap<String, AbstractColumn> columns;
+    private String tableName;
+    private HashMap<String, AbstractColumn> columns;
     private int tableSize;
     private String primaryKeys;
     private HashMap<String, String> foreignKeys;
     private HashMap<String, String> metaDataFks; // 根据Database的metadata获取的外键信息
     private int joinTag;
     private int lastJoinTag;
+
+    public Schema() {}
 
     public Schema(String tableName, HashMap<String, AbstractColumn> columns) {
         this.tableName = tableName;
@@ -76,10 +78,6 @@ public class Schema {
             HashMap<String, String> fks = Optional.ofNullable(schema.getForeignKeys()).orElse(new HashMap<>());
             schema.setMetaDataFks(fks);
         }
-    }
-
-    public HashMap<String, AbstractColumn> getColumns() {
-        return columns;
     }
 
     /**
@@ -154,10 +152,6 @@ public class Schema {
             throw new TouchstoneToolChainException("不存在的列" + columnName);
         }
         return columns.get(columnName).getNdv();
-    }
-
-    public Collection<AbstractColumn> getAllColumns() {
-        return columns.values();
     }
 
 
@@ -255,6 +249,10 @@ public class Schema {
         return tableName;
     }
 
+    public void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
+
     public int getTableSize() {
         return tableSize;
     }
@@ -273,6 +271,34 @@ public class Schema {
 
     public HashMap<String, String> getForeignKeys() {
         return foreignKeys;
+    }
+
+    public void setForeignKeys(HashMap<String, String> foreignKeys) {
+        this.foreignKeys = foreignKeys;
+    }
+
+    public String getPrimaryKeys() {
+        return primaryKeys;
+    }
+
+    public void setJoinTag(int joinTag) {
+        this.joinTag = joinTag;
+    }
+
+    public int getLastJoinTag() {
+        return lastJoinTag;
+    }
+
+    public void setLastJoinTag(int lastJoinTag) {
+        this.lastJoinTag = lastJoinTag;
+    }
+
+    public void setColumns(HashMap<String, AbstractColumn> columns) {
+        this.columns = columns;
+    }
+
+    public HashMap<String, AbstractColumn> getColumns() {
+        return columns;
     }
 
     @Override

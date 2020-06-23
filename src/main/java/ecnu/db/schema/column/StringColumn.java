@@ -19,9 +19,17 @@ public class StringColumn extends AbstractColumn {
         this.maxLength = maxLength;
     }
 
+    public BigDecimal getAvgLength() {
+        return avgLength;
+    }
+
+    public int getMaxLength() {
+        return maxLength;
+    }
+
     @Override
     public int getNdv() {
-        return -1;
+        return this.ndv;
     }
 
     public void setNdv(int ndv) {
@@ -30,6 +38,7 @@ public class StringColumn extends AbstractColumn {
 
     @Override
     public String formatDataDistribution() {
+        // TODO
         return columnName + ";" + nullPercentage + ';' + avgLength + ';' + maxLength + ';' + ndv;
     }
 }

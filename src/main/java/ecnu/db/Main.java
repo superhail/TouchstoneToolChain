@@ -2,12 +2,16 @@ package ecnu.db;
 
 
 import com.alibaba.druid.sql.SQLUtils;
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.TypeReference;
 import ecnu.db.analyzer.online.AbstractAnalyzer;
 import ecnu.db.analyzer.online.ExecutionNode;
 import ecnu.db.analyzer.online.Tidb3Analyzer;
 import ecnu.db.analyzer.online.Tidb4Analyzer;
 import ecnu.db.analyzer.statical.QueryTableName;
 import ecnu.db.dbconnector.AbstractDbConnector;
+import ecnu.db.dbconnector.DatabaseConnectorInterface;
+import ecnu.db.dbconnector.DumpFileConnector;
 import ecnu.db.dbconnector.TidbConnector;
 import ecnu.db.schema.Schema;
 import ecnu.db.schema.generation.AbstractSchemaGenerator;
@@ -17,13 +21,12 @@ import ecnu.db.utils.SystemConfig;
 import ecnu.db.utils.TouchstoneToolChainException;
 import org.apache.commons.io.FileUtils;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.sql.SQLException;
-import java.text.ParseException;
 import java.util.*;
+import java.util.stream.Collectors;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * @author wangqingshuai
@@ -107,7 +110,7 @@ public class Main {
         return sql;
     }
 
-    public static void main(String[] args) throws TouchstoneToolChainException, SQLException, IOException, ParseException {
+    public static void main(String[] args) throws Exception {
         SystemConfig systemConfig = SystemConfig.readConfig(args[0]);
 
         File sqlInput = new File(systemConfig.getSqlsDirectory());
@@ -116,76 +119,66 @@ public class Main {
             throw new TouchstoneToolChainException("该文件夹下没有sql文件");
         }
 
-        File writeDirectory = new File(systemConfig.getResultDirectory());
+        File resultDirectory = new File(systemConfig.getResultDirectory()),
+                retDir = new File(systemConfig.getResultDirectory()),
+                retSqlDir = new File(systemConfig.getResultDirectory(),"sql"),
+                dumpDir = Optional.ofNullable(systemConfig.getDumpDirectory()).map(File::new).orElse(null),
+                loadDir = Optional.ofNullable(systemConfig.getLoadDirectory()).map(File::new).orElse(null);
+        if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
+        if (dumpDir != null && dumpDir.isDirectory()) FileUtils.deleteDirectory(dumpDir);
+        if (retDir.isDirectory()) FileUtils.deleteDirectory(retDir);
+        if (!retSqlDir.mkdirs()){
+            throw new TouchstoneToolChainException("无法创建输出文件夹");
+        }
+        if (dumpDir != null && !dumpDir.mkdirs()) {
+            throw new TouchstoneToolChainException("无法创建持久化输出文件夹");
+        }
 
-        AbstractDbConnector dbConnector = new TidbConnector(systemConfig);
+        DatabaseConnectorInterface dbConnector;
+        if (loadDir != null && loadDir.isDirectory()) {
+            List<String> tableNames = loadTableNames(loadDir);
+            Map<String, List<String[]>> queryPlanMap = loadQueryPlans(loadDir);
+            Map<String, Integer> multiColNdvMap = loadMultiColMap(loadDir);
+            dbConnector = new DumpFileConnector(tableNames, queryPlanMap, multiColNdvMap);
+        } else {
+            dbConnector = new TidbConnector(systemConfig);
+        }
         AbstractSchemaGenerator dbSchemaGenerator = new TidbSchemaGenerator();
 
         System.out.println("开始获取表名");
-        ArrayList<String> tableNames;
-        if (systemConfig.isCrossMultiDatabase()) {
-            HashSet<String> tableNameSet = new HashSet<>();
-            for (File sqlFile : files) {
-                if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
-                    List<String> queries = ReadQuery.getSQLsFromFile(sqlFile.getPath(), "mysql");
-                    for (String sql : queries) {
-                        tableNameSet.addAll(QueryTableName.getTableName(sql, "mysql"));
-                    }
-                }
-            }
-            tableNames = new ArrayList<>(tableNameSet);
-        } else {
-            tableNames = dbConnector.getTableNames();
-        }
+        List<String> tableNames;
+        tableNames = getTableNames(systemConfig, files, dbConnector);
         System.out.println("获取表名成功，表名为:" + tableNames);
-        HashMap<String, Schema> schemas = new HashMap<>(tableNames.size());
+        if (dumpDir != null && dumpDir.isDirectory()) {
+            dumpTableNames(dumpDir, tableNames);
+            System.out.println("表名持久化成功");
+        }
         System.out.println("开始获取表结构和数据分布");
-        for (String tableName : tableNames) {
-            System.out.println("开始获取" + tableName + "的信息");
-            System.out.print("获取表结构...");
-            Schema schema = dbSchemaGenerator.generateSchemaNoKeys(tableName, dbConnector.getTableDdl(tableName));
-            System.out.println("成功");
-            System.out.print("获取表数据分布...");
-            dbSchemaGenerator.setDataRangeBySqlResult(schema.getAllColumns(), dbConnector.getDataRange(tableName,
-                    dbSchemaGenerator.getColumnDistributionSql(schema.getTableName(), schema.getAllColumns())));
-            dbSchemaGenerator.setDataRangeUnique(schema, dbConnector);
-            System.out.println("成功");
-            schemas.put(tableName, schema);
-        }
-        Schema.initFks(dbConnector.databaseMetaData, schemas);
-
+        HashMap<String, Schema> schemas = getSchemas(loadDir, dbConnector, dbSchemaGenerator, tableNames);
         System.out.println("获取表结构和数据分布成功，开始获取query查询计划");
-
-        AbstractAnalyzer queryAnalyzer;
-        if (systemConfig.getDatabaseVersion().equals("3.1.0")) {
-            queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
-        } else if (systemConfig.getDatabaseVersion().equals("4.0.0")) {
-            queryAnalyzer = new Tidb4Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
-        } else  {
-            throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", systemConfig.getDatabaseVersion()));
+        if (dumpDir != null && dumpDir.isDirectory()) {
+            dumpSchemas(dumpDir, schemas);
+            System.out.println("表结构和数据分布持久化成功");
         }
 
-        File retDir = new File(systemConfig.getResultDirectory()), retSqlDir = new File(systemConfig.getResultDirectory() + "/sql/");
-        if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
-        if (retDir.isDirectory()) FileUtils.deleteDirectory(retDir);
-        if(!retSqlDir.mkdirs()){
-            throw new TouchstoneToolChainException("无法创建输出文件夹");
-        }
-
+        AbstractAnalyzer queryAnalyzer = getQueryAnalyzer(systemConfig, dbConnector, schemas);
         List<String> queryInfos = new LinkedList<>();
         for (File sqlFile : files) {
             if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
                 List<String> queries = ReadQuery.getSQLsFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
                 int index = 0;
                 BufferedWriter sqlWriter = new BufferedWriter(new FileWriter(
-                        new File(retSqlDir.getPath() + "/" + sqlFile.getName())));
+                        new File(retSqlDir.getPath(), sqlFile.getName())));
                 List<String[]> queryPlan = new ArrayList<>();
                 for (String sql : queries) {
                     index++;
                     String queryCanonicalName = String.format("%s_%d", sqlFile.getName(), index);
                     try {
                         queryInfos.add("## " + queryCanonicalName);
-                        queryPlan = queryAnalyzer.getQueryPlan(sql);
+                        queryPlan = queryAnalyzer.getQueryPlan(queryCanonicalName, sql);
+                        if (dumpDir != null && dumpDir.isDirectory()) {
+                            dumpQueryPlan(dumpDir, queryPlan, queryCanonicalName);
+                        }
                         ExecutionNode root = queryAnalyzer.getExecutionTree(queryPlan);
                         queryInfos.addAll(queryAnalyzer.extractQueryInfos(root));
                         String outputMessage = String.format("%-15s Status:\033[32m获取成功\033[0m", queryCanonicalName);
@@ -249,22 +242,24 @@ public class Main {
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
                         System.out.println(String.format("%-15s Status:\033[32m获取失败\033[0m", queryCanonicalName));
-                        System.out.println(e.getMessage());
-                        for (String[] strings : queryPlan) {
-                            for (String string : strings) {
-                                System.out.print(string + "\t");
-                            }
-                            System.out.println();
+                        e.printStackTrace();
+                        if (queryPlan != null && !queryPlan.isEmpty()) {
+                            String queryPlanFileName = String.format("%s_query_plan.txt", queryCanonicalName);
+                            File file = new File(dumpDir.getPath(), queryPlanFileName);
+                            FileUtils.writeStringToFile(file, JSON.toJSONString(queryPlan), UTF_8);
                         }
-
                     }
                 }
             }
         }
         System.out.println("获取查询计划完成");
 
+        if (dumpDir != null && dumpDir.isDirectory()) {
+            dumpMultiCol(dumpDir, dbConnector);
+        }
+
         BufferedWriter schemaWriter = new BufferedWriter(new FileWriter(
-                new File(writeDirectory.getPath() + "/schema.conf")));
+                new File(resultDirectory.getPath(), "schema.conf")));
         for (Schema schema : schemas.values()) {
             String schemaInfo = schema.formatSchemaInfo(), dataDistributionInfo = schema.formatDataDistributionInfo();
             if (schemaInfo != null) {
@@ -276,11 +271,121 @@ public class Main {
         }
         schemaWriter.close();
         BufferedWriter ccWriter = new BufferedWriter(new FileWriter(
-                new File(writeDirectory.getPath() + "/constraintsChain.conf")));
+                new File(resultDirectory.getPath(), "constraintsChain.conf")));
         for (String queryInfo : queryInfos) {
             ccWriter.write(queryInfo + "\n");
         }
         ccWriter.close();
+    }
+
+    private static void dumpMultiCol(File dumpDir, DatabaseConnectorInterface dbConnector) throws IOException {
+        String content = JSON.toJSONString(dbConnector.getMultiColNdvMap(), true);
+        File multiColMapFile = new File(dumpDir.getPath(), "multiColNdv");
+        FileUtils.writeStringToFile(multiColMapFile, content, UTF_8);
+    }
+
+    private static void dumpQueryPlan(File dumpDir, List<String[]> queryPlan, String queryCanonicalName) throws IOException {
+        String content = queryPlan.stream().map((strs) -> String.join(";", strs)).collect(Collectors.joining("\n"));
+        File queryPlanFile = new File(dumpDir.getPath(), String.format("%s_dump", queryCanonicalName));
+        FileUtils.writeStringToFile(queryPlanFile, content, UTF_8);
+    }
+
+    private static void dumpSchemas(File dumpDir, HashMap<String, Schema> schemas) throws IOException {
+        File schemaFile = new File(dumpDir, "schemas");
+        FileUtils.writeStringToFile(schemaFile, JSON.toJSONString(schemas, true), UTF_8);
+    }
+
+    private static void dumpTableNames(File dumpDir, List<String> tableNames) throws IOException {
+        String str = String.join("\n", tableNames);
+        File tableNameFile = new File(dumpDir.getPath(), "tableNames");
+        FileUtils.writeStringToFile(tableNameFile, str, UTF_8);
+    }
+
+    private static Map<String, Integer> loadMultiColMap(File loadDir) throws TouchstoneToolChainException, IOException {
+        Map<String, Integer> multiColNdvMap;
+        File multiColNdvFile = new File(loadDir.getPath(), "multiColNdv");
+        if (!multiColNdvFile.isFile()) {
+            throw new TouchstoneToolChainException(String.format("找不到%s", multiColNdvFile.getAbsolutePath()));
+        }
+        multiColNdvMap = JSON.parseObject(FileUtils.readFileToString(multiColNdvFile, UTF_8), new TypeReference<>(){});
+        return multiColNdvMap;
+    }
+
+    private static Map<String, List<String[]>> loadQueryPlans(File loadDir) throws IOException {
+        Map<String, List<String[]>> queryPlanMap = new HashMap<>();
+        for (File queryPlanFile: Optional.ofNullable(loadDir.listFiles((dir, name) -> name.endsWith("dump"))).orElse(new File[]{})) {
+            String content = FileUtils.readFileToString(queryPlanFile, UTF_8);
+            queryPlanMap.put(queryPlanFile.getName(), Arrays.stream(content.split("\n"))
+                    .map((str) -> str.split(";", -1)).collect(Collectors.toList()));
+        }
+        return queryPlanMap;
+    }
+
+    private static HashMap<String, Schema> getSchemas(File loadDir, DatabaseConnectorInterface dbConnector, AbstractSchemaGenerator dbSchemaGenerator, List<String> tableNames) throws TouchstoneToolChainException, IOException, SQLException {
+        HashMap<String, Schema> schemas = new HashMap<>(tableNames.size());
+        if (loadDir != null && loadDir.isDirectory()) {
+            File schemaFile = new File(loadDir.getPath(), "schemas");
+            if (!schemaFile.isFile()) {
+                throw new TouchstoneToolChainException(String.format("找不到%s", schemaFile.getAbsolutePath()));
+            }
+            schemas = JSON.parseObject(FileUtils.readFileToString(schemaFile, UTF_8), new TypeReference<>(){});
+            System.out.println("加载表结构和表数据分布成功");
+        } else {
+            for (String tableName : tableNames) {
+                System.out.println("开始获取" + tableName + "的信息");
+                System.out.print("获取表结构...");
+                Schema schema = dbSchemaGenerator.generateSchemaNoKeys(tableName, ((AbstractDbConnector) dbConnector).getTableDdl(tableName));
+                System.out.println("成功");
+                System.out.print("获取表数据分布...");
+                dbSchemaGenerator.setDataRangeBySqlResult(schema.getColumns().values(), ((AbstractDbConnector) dbConnector).getDataRange(tableName,
+                        dbSchemaGenerator.getColumnDistributionSql(schema.getTableName(), schema.getColumns().values())));
+                dbSchemaGenerator.setDataRangeUnique(schema, ((AbstractDbConnector) dbConnector));
+                System.out.println("成功");
+                schemas.put(tableName, schema);
+            }
+            Schema.initFks(((AbstractDbConnector) dbConnector).databaseMetaData, schemas);
+        }
+        return schemas;
+    }
+
+
+    private static AbstractAnalyzer getQueryAnalyzer(SystemConfig systemConfig, DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) throws TouchstoneToolChainException {
+        AbstractAnalyzer queryAnalyzer;
+        if (systemConfig.getDatabaseVersion().equals("3.1.0")) {
+            queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        } else if (systemConfig.getDatabaseVersion().equals("4.0.0")) {
+            queryAnalyzer = new Tidb4Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        } else  {
+            throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", systemConfig.getDatabaseVersion()));
+        }
+        return queryAnalyzer;
+    }
+
+    private static List<String> loadTableNames(File loadDir) throws TouchstoneToolChainException, IOException {
+        File tableNameFile = new File(loadDir.getPath(), "tableNames");
+        if (!tableNameFile.isFile()) {
+            throw new TouchstoneToolChainException(String.format("找不到%s", tableNameFile.getAbsolutePath()));
+        }
+        return Arrays.asList(FileUtils.readFileToString(tableNameFile, UTF_8).split("\n"));
+    }
+
+    private static List<String> getTableNames(SystemConfig systemConfig, File[] files, DatabaseConnectorInterface dbConnector) throws IOException, SQLException {
+        List<String> tableNames;
+        if (systemConfig.isCrossMultiDatabase()) {
+            HashSet<String> tableNameSet = new HashSet<>();
+            for (File sqlFile : files) {
+                if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
+                    List<String> queries = ReadQuery.getSQLsFromFile(sqlFile.getPath(), "mysql");
+                    for (String sql : queries) {
+                        tableNameSet.addAll(QueryTableName.getTableName(sql, "mysql"));
+                    }
+                }
+            }
+            tableNames = new ArrayList<>(tableNameSet);
+        } else {
+            tableNames = dbConnector.getTableNames();
+        }
+        return tableNames;
     }
 
 

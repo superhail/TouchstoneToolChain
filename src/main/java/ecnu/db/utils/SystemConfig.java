@@ -22,6 +22,8 @@ public class SystemConfig {
     private String dataSource;
     private String databaseVersion;
     private String sqlsDirectory;
+    private String loadDirectory;
+    private String dumpDirectory;
     private HashMap<ColumnType, HashSet<String>> typeConvert;
     private HashMap<String, String> tidbSelectArgs;
 
@@ -67,6 +69,22 @@ public class SystemConfig {
 
     public void setSqlsDirectory(String sqlsDirectory) {
         this.sqlsDirectory = sqlsDirectory;
+    }
+
+    public String getLoadDirectory() {
+        return loadDirectory;
+    }
+
+    public void setLoadDirectory(String loadDirectory) {
+        this.loadDirectory = loadDirectory;
+    }
+
+    public String getDumpDirectory() {
+        return dumpDirectory;
+    }
+
+    public void setDumpDirectory(String dumpDirectory) {
+        this.dumpDirectory = dumpDirectory;
     }
 
     public HashMap<String, String> getTidbSelectArgs() {

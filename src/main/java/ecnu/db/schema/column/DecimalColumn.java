@@ -16,6 +16,14 @@ public class DecimalColumn extends AbstractColumn {
         this.max = max;
     }
 
+    public double getMin() {
+        return min;
+    }
+
+    public double getMax() {
+        return max;
+    }
+
     @Override
     public int getNdv() {
         return -1;

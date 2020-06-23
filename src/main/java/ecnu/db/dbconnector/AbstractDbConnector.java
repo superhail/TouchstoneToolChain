@@ -5,17 +5,22 @@ import ecnu.db.utils.TouchstoneToolChainException;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author wangqingshuai
  * 数据库驱动连接器
  */
-public abstract class AbstractDbConnector {
+public abstract class AbstractDbConnector implements DatabaseConnectorInterface {
     public DatabaseMetaData databaseMetaData;
     /**
      * JDBC 驱动名及数据库 URL
      */
     protected Statement stmt;
+
+    private final HashMap<String, Integer> multiColNdvMap = new HashMap<>();
 
     AbstractDbConnector(SystemConfig config) throws TouchstoneToolChainException {
         // 数据库的用户名与密码
@@ -45,7 +50,7 @@ public abstract class AbstractDbConnector {
 
     abstract String abstractGetCreateTableSql(String tableName);
 
-    public ArrayList<String> getTableNames() throws SQLException {
+    public List<String> getTableNames() throws SQLException {
         ResultSet rs = stmt.executeQuery(abstractGetTableNames());
         ArrayList<String> tables = new ArrayList<>();
         while (rs.next()) {
@@ -75,7 +80,7 @@ public abstract class AbstractDbConnector {
         return infos;
     }
 
-    public ArrayList<String[]> explainQuery(String sql, String[] sqlInfoColumns) throws SQLException {
+    public List<String[]> explainQuery(String queryCanonicalName, String sql, String[] sqlInfoColumns) throws SQLException {
         ResultSet rs = stmt.executeQuery("explain analyze " + sql);
         ArrayList<String[]> result = new ArrayList<>();
         while (rs.next()) {
@@ -88,10 +93,16 @@ public abstract class AbstractDbConnector {
         return result;
     }
 
-    public int getMultiColumnsNdv(String schema, String columns) throws SQLException {
+    public int getMultiColNdv(String schema, String columns) throws SQLException {
         ResultSet rs = stmt.executeQuery("select count(distinct " + columns + ") from " + schema);
         rs.next();
-        return rs.getInt(1);
+        Integer result = rs.getInt(1);
+        multiColNdvMap.put(String.format("%s.%s", schema, columns), result);
+        return result;
+    }
+
+    public Map<String, Integer> getMultiColNdvMap() {
+        return this.multiColNdvMap;
     }
 
 
