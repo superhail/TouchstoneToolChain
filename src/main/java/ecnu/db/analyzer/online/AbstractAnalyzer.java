@@ -1,7 +1,7 @@
 package ecnu.db.analyzer.online;
 
 import ecnu.db.analyzer.statical.QueryAliasParser;
-import ecnu.db.dbconnector.AbstractDbConnector;
+import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
 import org.apache.commons.lang3.tuple.Pair;
@@ -16,7 +16,7 @@ import java.util.Map;
  * @author wangqingshuai
  */
 public abstract class AbstractAnalyzer {
-    protected AbstractDbConnector dbConnector;
+    protected DatabaseConnectorInterface dbConnector;
     protected Map<String, String> aliasDic;
     protected QueryAliasParser queryAliasParser = new QueryAliasParser();
     protected HashMap<String, Schema> schemas;
@@ -25,7 +25,7 @@ public abstract class AbstractAnalyzer {
     protected HashMap<String, List<String>> argsAndIndex = new HashMap<>();
 
 
-    AbstractAnalyzer(AbstractDbConnector dbConnector, HashMap<String, Schema> schemas) {
+    AbstractAnalyzer(DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) {
         this.dbConnector = dbConnector;
         this.schemas = schemas;
     }
@@ -66,9 +66,9 @@ public abstract class AbstractAnalyzer {
      */
     abstract Pair<String, String> analyzeSelectCondition(String selectCondition) throws TouchstoneToolChainException;
 
-    public List<String[]> getQueryPlan(String sql) throws SQLException {
+    public List<String[]> getQueryPlan(String queryCanonicalName, String sql) throws SQLException, TouchstoneToolChainException {
         aliasDic = queryAliasParser.getTableAlias(sql, getDbType());
-        return dbConnector.explainQuery(sql, getSqlInfoColumns());
+        return dbConnector.explainQuery(queryCanonicalName, sql, getSqlInfoColumns());
     }
 
     /**
@@ -81,6 +81,7 @@ public abstract class AbstractAnalyzer {
 
         List<String> queryInfos = new ArrayList<>();
         do {
+
             QueryInfo queryInfo = null;
             try {
                 queryInfo = extractConstraintChain(root);
@@ -89,10 +90,9 @@ public abstract class AbstractAnalyzer {
             }
             if (queryInfo == null) {
                 break;
-            } else {
-                if (!queryInfo.getData().isBlank()) {
-                    queryInfos.add("[" + queryInfo.getTableName() + "];" + queryInfo.getData());
-                }
+            }
+            if (!queryInfo.getData().isBlank()) {
+                queryInfos.add("[" + queryInfo.getTableName() + "];" + queryInfo.getData());
             }
         } while (true);
 
@@ -159,7 +159,6 @@ public abstract class AbstractAnalyzer {
                     String[] joinColumnInfos = analyzeJoinInfo(node.getInfo());
                     String pkTable = joinColumnInfos[0], pkCol = joinColumnInfos[1],
                             fkTable = joinColumnInfos[2], fkCol = joinColumnInfos[3];
-                    analyzeJoinInfo(node.getInfo());
                     //如果当前的join节点，不属于之前遍历的节点，则停止继续向上访问
                     if (!pkTable.equals(constraintChain.getTableName())
                             && !fkTable.equals(constraintChain.getTableName())) {
@@ -235,8 +234,8 @@ public abstract class AbstractAnalyzer {
                 return schemas.get(pkTable).getNdv(pkCol) > schemas.get(fkTable).getNdv(fkCol);
             }
         } else {
-            int leftTableNdv = dbConnector.getMultiColumnsNdv(pkTable, pkCol);
-            int rightTableNdv = dbConnector.getMultiColumnsNdv(fkTable, fkCol);
+            int leftTableNdv = dbConnector.getMultiColNdv(pkTable, pkCol);
+            int rightTableNdv = dbConnector.getMultiColNdv(fkTable, fkCol);
             if (leftTableNdv == rightTableNdv) {
                 return schemas.get(pkTable).getTableSize() < schemas.get(fkTable).getTableSize();
             } else {

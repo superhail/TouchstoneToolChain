@@ -104,7 +104,7 @@ public class TidbSchemaGenerator extends AbstractSchemaGenerator {
         TidbStatsJsonObject tidbStatsJsonObject = JSON.parseObject(((TidbConnector) dbConnector).
                 tableInfoJson(schema.getTableName()).replace(" ", ""), TidbStatsJsonObject.class);
         schema.setTableSize(tidbStatsJsonObject.getCount());
-        for (AbstractColumn column : schema.getAllColumns()) {
+        for (AbstractColumn column : schema.getColumns().values()) {
             column.setNullPercentage(tidbStatsJsonObject.getNullProbability(column.getColumnName()));
             if (column.getColumnType() == ColumnType.INTEGER) {
                 ((IntColumn) column).setNdv(tidbStatsJsonObject.getNdv(column.getColumnName()));

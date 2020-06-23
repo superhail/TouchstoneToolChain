@@ -2,7 +2,7 @@ package ecnu.db.analyzer.online;
 
 import com.alibaba.druid.util.JdbcConstants;
 import ecnu.db.analyzer.online.ExecutionNode.ExecutionNodeType;
-import ecnu.db.dbconnector.AbstractDbConnector;
+import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
 import org.apache.commons.lang3.tuple.MutablePair;
@@ -31,8 +31,8 @@ public class Tidb4Analyzer extends AbstractAnalyzer {
     HashMap<String, String> tidbSelectArgs;
 
 
-    public Tidb4Analyzer(AbstractDbConnector dbConnector, HashMap<String, String> tidbSelectArgs,
-                        HashMap<String, Schema> schemas) {
+    public Tidb4Analyzer(DatabaseConnectorInterface dbConnector, HashMap<String, String> tidbSelectArgs,
+                         HashMap<String, Schema> schemas) {
         super(dbConnector, schemas);
         this.tidbSelectArgs = tidbSelectArgs;
     }

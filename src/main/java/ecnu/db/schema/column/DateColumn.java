@@ -9,10 +9,10 @@ import java.util.regex.Pattern;
 
 
 public class DateColumn extends AbstractColumn {
-    private final SimpleDateFormat touchstoneFmt = new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss");
-    private final String[] dataTimePattern = new String[]{"yyyy-MM", "yyyyMM", "yyyy/MM", "yyyyMMdd", "yyyy-MM-dd", "yyyy/MM/dd",
+    private static final SimpleDateFormat touchstoneFmt = new SimpleDateFormat("yyyy-MM-dd-HH:mm:ss");
+    private static final String[] dataTimePattern = new String[]{"yyyy-MM", "yyyyMM", "yyyy/MM", "yyyyMMdd", "yyyy-MM-dd", "yyyy/MM/dd",
             "yyyyMMddHHmmss", "yyyy-MM-dd HH:mm:ss", "yyyy/MM/dd HH:mm:ss"};
-    private final Pattern pattern = Pattern.compile("-?\\d+(\\.\\d+)?");
+    private static final Pattern pattern = Pattern.compile("-?\\d+(\\.\\d+)?");
     private String begin;
     private String end;
 
@@ -24,8 +24,16 @@ public class DateColumn extends AbstractColumn {
         this.begin = begin;
     }
 
+    public String getBegin() {
+        return begin;
+    }
+
     public void setEnd(String end) {
         this.end = end;
+    }
+
+    public String getEnd() {
+        return end;
     }
 
     @Override

@@ -17,9 +17,18 @@ public class IntColumn extends AbstractColumn {
         this.max = max;
     }
 
+    public int getMin() {
+        return min;
+    }
+
+    public int getMax() {
+        return max;
+    }
+
+    // TODO
     @Override
     public int getNdv() {
-        return -1;
+        return this.ndv;
     }
 
     public void setNdv(int ndv) {
