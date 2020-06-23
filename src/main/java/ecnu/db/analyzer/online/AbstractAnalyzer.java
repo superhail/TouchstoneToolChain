@@ -77,11 +77,17 @@ public abstract class AbstractAnalyzer {
      * @param root 查询树
      * @return 该查询树结构出的约束链信息和表信息
      */
-    public List<String> extractQueryInfos(ExecutionNode root) throws SQLException, TouchstoneToolChainException {
+    public List<String> extractQueryInfos(ExecutionNode root) throws SQLException {
 
         List<String> queryInfos = new ArrayList<>();
         do {
-            QueryInfo queryInfo = extractConstraintChain(root);
+
+            QueryInfo queryInfo = null;
+            try {
+                queryInfo = extractConstraintChain(root);
+            } catch (TouchstoneToolChainException e) {
+                e.printStackTrace();
+            }
             if (queryInfo == null) {
                 break;
             }
