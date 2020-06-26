@@ -1,4 +1,4 @@
-package ecnu.db.analyzer.online;
+package ecnu.db.analyzer.online.node;
 
 import java.util.Arrays;
 

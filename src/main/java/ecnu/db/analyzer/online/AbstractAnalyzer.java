@@ -1,5 +1,8 @@
 package ecnu.db.analyzer.online;
 
+import ecnu.db.analyzer.online.node.ExecutionNode;
+import ecnu.db.analyzer.online.node.NodeTypeRef;
+import ecnu.db.analyzer.online.node.NodeTypeRefFactory;
 import ecnu.db.analyzer.statical.QueryAliasParser;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
@@ -23,14 +26,17 @@ public abstract class AbstractAnalyzer {
     protected int sqlArgIndex = 0;
     protected int lastArgIndex = 0;
     protected HashMap<String, List<String>> argsAndIndex = new HashMap<>();
+    protected NodeTypeRef nodeTypeRef;
+    protected String databaseVersion;
 
-
-    AbstractAnalyzer(DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) {
+    AbstractAnalyzer(String databaseVersion, DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) {
+        this.nodeTypeRef = NodeTypeRefFactory.getNodeTypeRef(databaseVersion);
+        this.databaseVersion = databaseVersion;
         this.dbConnector = dbConnector;
         this.schemas = schemas;
     }
 
-    abstract String[] getSqlInfoColumns();
+    abstract String[] getSqlInfoColumns(String databaseVersion) throws TouchstoneToolChainException;
 
     /**
      * 获取数据库使用的静态解析器的数据类型
@@ -68,7 +74,7 @@ public abstract class AbstractAnalyzer {
 
     public List<String[]> getQueryPlan(String queryCanonicalName, String sql) throws SQLException, TouchstoneToolChainException {
         aliasDic = queryAliasParser.getTableAlias(sql, getDbType());
-        return dbConnector.explainQuery(queryCanonicalName, sql, getSqlInfoColumns());
+        return dbConnector.explainQuery(queryCanonicalName, sql, getSqlInfoColumns(databaseVersion));
     }
 
     /**
@@ -145,7 +151,8 @@ public abstract class AbstractAnalyzer {
                 if (aliasDic != null && aliasDic.containsKey(tableName)) {
                     tableName = aliasDic.get(tableName);
                 }
-                return new QueryInfo("", tableName, schemas.get(tableName).getTableSize());
+                Schema schema = schemas.get(tableName);
+                return new QueryInfo("", tableName, schema.getTableSize());
             } else {
                 throw new TouchstoneToolChainException("join节点的左右节点已经被访问过");
             }

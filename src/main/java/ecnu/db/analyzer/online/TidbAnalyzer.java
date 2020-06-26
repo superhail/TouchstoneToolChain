@@ -1,7 +1,9 @@
 package ecnu.db.analyzer.online;
 
 import com.alibaba.druid.util.JdbcConstants;
-import ecnu.db.analyzer.online.ExecutionNode.ExecutionNodeType;
+import ecnu.db.analyzer.online.node.ExecutionNode;
+import ecnu.db.analyzer.online.node.ExecutionNode.ExecutionNodeType;
+import ecnu.db.analyzer.online.node.RawNode;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
@@ -17,30 +19,31 @@ import static ecnu.db.utils.CommonUtils.matchPattern;
 /**
  * @author qingshuai.wang
  */
-public class Tidb3Analyzer extends AbstractAnalyzer {
+public class TidbAnalyzer extends AbstractAnalyzer {
     private static final Pattern ROW_COUNTS = Pattern.compile("rows:[0-9]*");
     private static final Pattern INNER_JOIN_OUTER_KEY = Pattern.compile("outer key:.*,");
     private static final Pattern INNER_JOIN_INNER_KEY = Pattern.compile("inner key:.*");
     private static final Pattern JOIN_EQ_OPERATOR = Pattern.compile("equal:\\[.*]");
     private static final Pattern PLAN_ID = Pattern.compile("([a-zA-Z]+_[0-9]+)");
     private static final Pattern JOIN_EQ_SUB_EXPR = Pattern.compile("eq\\(([a-zA-Z0-9\\_\\$\\.]+)\\, ([a-zA-Z0-9\\_\\$\\.]+)\\)");
-    HashSet<String> readerNodeTypes = new HashSet<>(Arrays.asList("TableReader", "IndexReader", "IndexLookUp"));
-    HashSet<String> passNodeTypes = new HashSet<>(Arrays.asList("Projection", "TopN", "Sort", "HashAgg", "StreamAgg", "IndexScan"));
-    HashSet<String> joinNodeTypes = new HashSet<>(Arrays.asList("HashRightJoin", "HashLeftJoin", "IndexMergeJoin", "IndexHashJoin", "IndexJoin", "MergeJoin"));
-    HashSet<String> filterNodeTypes = new HashSet<>(Collections.singletonList("Selection"));
-    HashSet<String> scanNodeTypes = new HashSet<>(Collections.singletonList("TableScan"));
     HashMap<String, String> tidbSelectArgs;
 
 
-    public Tidb3Analyzer(DatabaseConnectorInterface dbConnector, HashMap<String, String> tidbSelectArgs,
-                         HashMap<String, Schema> schemas) {
-        super(dbConnector, schemas);
+    public TidbAnalyzer(String databaseVersion, DatabaseConnectorInterface dbConnector, HashMap<String, String> tidbSelectArgs,
+                        HashMap<String, Schema> schemas) {
+        super(databaseVersion, dbConnector, schemas);
         this.tidbSelectArgs = tidbSelectArgs;
     }
 
     @Override
-    String[] getSqlInfoColumns() {
-        return new String[]{"id", "operator info", "execution info"};
+    String[] getSqlInfoColumns(String databaseVersion) throws TouchstoneToolChainException {
+        if ("3.1.0".equals(databaseVersion)) {
+            return new String[]{"id", "operator info", "execution info"};
+        } else if ("4.0.0".equals(databaseVersion)) {
+            return new String[]{"id", "operator info", "actRows", "access object"};
+        } else {
+            throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", databaseVersion));
+        }
     }
 
     @Override
@@ -66,40 +69,42 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         if (rawNode == null) {
             return null;
         }
-        String[] subQueryPlan = rawNode.data;
+        String[] subQueryPlan = extractSubQueryPlan(databaseVersion, rawNode.data);
         String planId = subQueryPlan[0], operatorInfo = subQueryPlan[1], executionInfo = subQueryPlan[2];
         planId = matchPattern(PLAN_ID, planId).get(0).get(0);
         Matcher matcher;
         String nodeType = rawNode.nodeType;
-        if (passNodeTypes.contains(nodeType)) {
+        if (nodeTypeRef.isPassNode(nodeType)) {
             return rawNode.left == null ? null : buildExecutionTree(rawNode.left);
         }
         int rowCount = (matcher = ROW_COUNTS.matcher(executionInfo)).find() ?
                 Integer.parseInt(matcher.group(0).split(":")[1]) : 0;
         ExecutionNode node;
         // 处理底层的TableScan
-        if (scanNodeTypes.contains(nodeType)) {
+        if (nodeTypeRef.isTableScanNode(nodeType)) {
             return new ExecutionNode(planId, ExecutionNodeType.scan, rowCount, operatorInfo);
-        } else if (filterNodeTypes.contains(nodeType)) {
+        } else if (nodeTypeRef.isFilterNode(nodeType)) {
             node = new ExecutionNode(planId, ExecutionNodeType.filter, rowCount, operatorInfo);
             // 跳过底部的TableScan
-            if (rawNode.left != null && scanNodeTypes.contains(rawNode.left.nodeType)) {
+            if (rawNode.left != null && nodeTypeRef.isTableScanNode(rawNode.left.nodeType)) {
                 return node;
             }
             node.leftNode = rawNode.left == null ? null : buildExecutionTree(rawNode.left);
             node.rightNode = rawNode.right == null ? null : buildExecutionTree(rawNode.right);
-        } else if (joinNodeTypes.contains(nodeType)) {
+        } else if (nodeTypeRef.isJoinNode(nodeType)) {
             node = new ExecutionNode(planId, ExecutionNodeType.join, rowCount, operatorInfo);
             node.leftNode = rawNode.left == null ? null : buildExecutionTree(rawNode.left);
             node.rightNode = rawNode.right == null ? null : buildExecutionTree(rawNode.right);
-        } else if (readerNodeTypes.contains(nodeType)) {
+        } else if (nodeTypeRef.isReaderNode(nodeType)) {
             // 右侧节点非空且不属于跳过的节点，跳过左侧节点
-            if (rawNode.right != null && !passNodeTypes.contains(rawNode.right.nodeType)) {
+            if (rawNode.right != null && !nodeTypeRef.isPassNode(rawNode.right.nodeType)) {
                 return buildExecutionTree(rawNode.right);
             }
             // 处理IndexReader后接一个IndexScan的情况
-            else if ("IndexScan".equals(rawNode.left.nodeType)) {
-                return new ExecutionNode(planId, ExecutionNodeType.scan, rowCount, rawNode.left.data[1]);
+            else if (nodeTypeRef.isIndexScanNode(rawNode.left.nodeType)) {
+                subQueryPlan = extractSubQueryPlan(databaseVersion, rawNode.left.data);
+                operatorInfo = subQueryPlan[1];
+                return new ExecutionNode(planId, ExecutionNodeType.scan, rowCount, operatorInfo);
             }
             node = buildExecutionTree(rawNode.left);
         } else {
@@ -115,7 +120,7 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
      * @return 生成好的树
      */
     private RawNode buildRawNodeTree(List<String[]> queryPlan) {
-        Stack<Pair<Integer, RawNode>> pStack = new Stack<>();
+        Deque<Pair<Integer, RawNode>> pStack = new ArrayDeque<>();
         List<List<String>> matches = matchPattern(PLAN_ID, queryPlan.get(0)[0]);
         String nodeType = matches.get(0).get(0).split("_")[0];
         RawNode rawNodeRoot = new RawNode(null, null, nodeType, queryPlan.get(0)), rawNode;
@@ -126,9 +131,10 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
             rawNode = new RawNode(null, null, nodeType, subQueryPlan);
             String planId = subQueryPlan[0];
             int level = (planId.split("─")[0].length() + 1) / 2;
-            while (pStack.peek().getKey() > level) {
+            while (!pStack.isEmpty() && pStack.peek().getKey() > level) {
                 pStack.pop(); // pop直到找到同一个层级的节点
             }
+            assert !pStack.isEmpty();
             if (pStack.peek().getKey().equals(level)) {
                 pStack.pop();
                 assert !pStack.isEmpty();
@@ -139,6 +145,20 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
             pStack.push(Pair.of(level, rawNode));
         }
         return rawNodeRoot;
+    }
+
+    private String[] extractSubQueryPlan(String databaseVersion, String[] data) throws TouchstoneToolChainException {
+        if ("3.1.0".equals(databaseVersion)) {
+            return data;
+        } else if ("4.0.0".equals(databaseVersion)) {
+            String[] ret = new String[3];
+            ret[0] = data[0];
+            ret[1] = data[3].isEmpty()? data[1]: String.format("%s,%s", data[3], data[1]);
+            ret[2] = "rows:" + data[2];
+            return ret;
+        } else {
+            throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", databaseVersion));
+        }
     }
 
     /**
