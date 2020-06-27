@@ -234,7 +234,7 @@ public class Main {
                         sqlWriter.close();
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
-                        System.out.println(String.format("%-15s Status:\033[32m获取失败\033[0m", queryCanonicalName));
+                        System.out.println(String.format("%-15s Status:\033[31m获取失败\033[0m", queryCanonicalName));
                         e.printStackTrace();
                         if (queryPlan != null && !queryPlan.isEmpty() && dumpDir != null) {
                             String queryPlanFileName = String.format("%s_query_plan.txt", queryCanonicalName);

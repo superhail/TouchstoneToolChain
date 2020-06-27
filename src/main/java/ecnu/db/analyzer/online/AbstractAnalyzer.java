@@ -147,10 +147,7 @@ public abstract class AbstractAnalyzer {
                         (double) node.getOutputRows() / schemas.get(tableNameAndSelectCondition.getLeft()).getTableSize() + "];";
                 return new QueryInfo(selectInfo, tableNameAndSelectCondition.getLeft(), node.getOutputRows());
             } else if (node.getType() == ExecutionNode.ExecutionNodeType.scan) {
-                String tableName = node.getInfo().split(",")[0].substring(6).toLowerCase();
-                if (aliasDic != null && aliasDic.containsKey(tableName)) {
-                    tableName = aliasDic.get(tableName);
-                }
+                String tableName = extractTableName(node.getInfo());
                 Schema schema = schemas.get(tableName);
                 return new QueryInfo("", tableName, schema.getTableSize());
             } else {
@@ -210,6 +207,7 @@ public abstract class AbstractAnalyzer {
                         node.setVisited();
                         constraintChain.addConstraint("[0," + tableNameAndSelectCondition.getRight() + "," +
                                 (double) node.getOutputRows() / constraintChain.getLastNodeLineCount() + "];");
+                        constraintChain.setLastNodeLineCount(node.getOutputRows());
                     }
                 }
             }
@@ -264,5 +262,13 @@ public abstract class AbstractAnalyzer {
         for (Schema schema : schemas.values()) {
             schema.keepJoinTag(success);
         }
+    }
+
+    protected String extractTableName(String operatorInfo) {
+        String tableName = operatorInfo.split(",")[0].substring(6).toLowerCase();
+        if (aliasDic != null && aliasDic.containsKey(tableName)) {
+            tableName = aliasDic.get(tableName);
+        }
+        return tableName;
     }
 }

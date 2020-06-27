@@ -12,11 +12,11 @@ public class CommonUtils {
     /**
      * 获取正则表达式的匹配
      * @param pattern
-     * @param planId
+     * @param str
      * @return 成功的所有匹配，一个{@code List<String>}对应一个匹配的所有group
      */
-    public static List<List<String>> matchPattern(Pattern pattern, String planId) {
-        Matcher matcher = pattern.matcher(planId);
+    public static List<List<String>> matchPattern(Pattern pattern, String str) {
+        Matcher matcher = pattern.matcher(str);
         List<List<String>> ret = new ArrayList<>();
         while (matcher.find()) {
             List<String> groups = new ArrayList<>();

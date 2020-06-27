@@ -1,7 +1,5 @@
 package ecnu.db.analyzer.online.node;
 
-import java.util.Arrays;
-
 /**
  * @author lianxuechao
  */
@@ -9,17 +7,21 @@ public class RawNode {
     public RawNode left;
     public RawNode right;
     public String nodeType;
-    public String[] data;
+    public String operatorInfo;
+    public int rowCount;
+    public String id;
 
-    public RawNode(RawNode left, RawNode right, String nodeType, String[] data) {
+    public RawNode( String id, RawNode left, RawNode right, String nodeType, String operatorInfo, int rowCount) {
+        this.id = id;
         this.left = left;
         this.right = right;
         this.nodeType = nodeType;
-        this.data = data;
+        this.operatorInfo = operatorInfo;
+        this.rowCount = rowCount;
     }
 
     @Override
     public String toString() {
-        return "RawNode{data=" + Arrays.toString(data) + "}";
+        return "RawNode{id=" + id + "}";
     }
 }
