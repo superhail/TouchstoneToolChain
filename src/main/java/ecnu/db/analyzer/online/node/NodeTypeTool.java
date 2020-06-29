@@ -1,6 +1,6 @@
 package ecnu.db.analyzer.online.node;
 
-public interface NodeTypeRef {
+public interface NodeTypeTool {
     boolean isReaderNode(String nodeType);
     boolean isPassNode(String nodeType);
     boolean isJoinNode(String nodeType);

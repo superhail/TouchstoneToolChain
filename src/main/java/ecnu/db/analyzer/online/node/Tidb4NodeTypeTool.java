@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 
-class Tidb4NodeTypeRef implements NodeTypeRef {
+class Tidb4NodeTypeTool implements NodeTypeTool {
     private static final HashSet<String> readerNodeTypes = new HashSet<>(Arrays.asList("TableReader", "IndexReader", "IndexLookUp"));
     private static final HashSet<String> passNodeTypes = new HashSet<>(Arrays.asList("Projection", "TopN", "Sort", "HashAgg", "StreamAgg", "IndexRangeScan", "IndexFullScan"));
     private static final HashSet<String> joinNodeTypes = new HashSet<>(Arrays.asList("IndexMergeJoin", "IndexHashJoin", "IndexJoin","HashJoin", "MergeJoin"));
