@@ -185,6 +185,7 @@ public abstract class AbstractAnalyzer {
                                     node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
                             //设置主键
                             schemas.get(pkTable).setPrimaryKeys(pkCol);
+                            constraintChain.setLastNodeLineCount(node.getOutputRows());
                         } else {
                             if (node.getJoinTag() < 0) {
                                 node.setJoinTag(schemas.get(pkTable).getJoinTag());
