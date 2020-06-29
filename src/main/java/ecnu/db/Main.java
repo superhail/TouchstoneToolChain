@@ -5,9 +5,8 @@ import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
 import ecnu.db.analyzer.online.AbstractAnalyzer;
-import ecnu.db.analyzer.online.ExecutionNode;
-import ecnu.db.analyzer.online.Tidb3Analyzer;
-import ecnu.db.analyzer.online.Tidb4Analyzer;
+import ecnu.db.analyzer.online.TidbAnalyzer;
+import ecnu.db.analyzer.online.node.ExecutionNode;
 import ecnu.db.analyzer.statical.QueryTableName;
 import ecnu.db.dbconnector.AbstractDbConnector;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
@@ -21,7 +20,10 @@ import ecnu.db.utils.SystemConfig;
 import ecnu.db.utils.TouchstoneToolChainException;
 import org.apache.commons.io.FileUtils;
 
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -113,11 +115,10 @@ public class Main {
     public static void main(String[] args) throws Exception {
         SystemConfig systemConfig = SystemConfig.readConfig(args[0]);
 
+        String sqlsDirectory = systemConfig.getSqlsDirectory();
         File sqlInput = new File(systemConfig.getSqlsDirectory());
-        File[] files = sqlInput.listFiles();
-        if (files == null) {
-            throw new TouchstoneToolChainException("该文件夹下没有sql文件");
-        }
+        File[] files = Optional.ofNullable(sqlInput.listFiles())
+                .orElseThrow(() -> new TouchstoneToolChainException(String.format("%s文件夹下没有sql文件", sqlsDirectory)));
 
         File resultDirectory = new File(systemConfig.getResultDirectory()),
                 retDir = new File(systemConfig.getResultDirectory()),
@@ -134,15 +135,7 @@ public class Main {
             throw new TouchstoneToolChainException("无法创建持久化输出文件夹");
         }
 
-        DatabaseConnectorInterface dbConnector;
-        if (loadDir != null && loadDir.isDirectory()) {
-            List<String> tableNames = loadTableNames(loadDir);
-            Map<String, List<String[]>> queryPlanMap = loadQueryPlans(loadDir);
-            Map<String, Integer> multiColNdvMap = loadMultiColMap(loadDir);
-            dbConnector = new DumpFileConnector(tableNames, queryPlanMap, multiColNdvMap);
-        } else {
-            dbConnector = new TidbConnector(systemConfig);
-        }
+        DatabaseConnectorInterface dbConnector = getDatabaseConnector(systemConfig, loadDir);
         AbstractSchemaGenerator dbSchemaGenerator = new TidbSchemaGenerator();
 
         System.out.println("开始获取表名");
@@ -161,7 +154,7 @@ public class Main {
             System.out.println("表结构和数据分布持久化成功");
         }
 
-        AbstractAnalyzer queryAnalyzer = getQueryAnalyzer(systemConfig, dbConnector, schemas);
+        AbstractAnalyzer queryAnalyzer = new TidbAnalyzer(systemConfig.getDatabaseVersion(), dbConnector, systemConfig.getTidbSelectArgs(), schemas);
         List<String> queryInfos = new LinkedList<>();
         for (File sqlFile : files) {
             if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
@@ -241,9 +234,9 @@ public class Main {
                         sqlWriter.close();
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
-                        System.out.println(String.format("%-15s Status:\033[32m获取失败\033[0m", queryCanonicalName));
+                        System.out.println(String.format("%-15s Status:\033[31m获取失败\033[0m", queryCanonicalName));
                         e.printStackTrace();
-                        if (queryPlan != null && !queryPlan.isEmpty()) {
+                        if (queryPlan != null && !queryPlan.isEmpty() && dumpDir != null) {
                             String queryPlanFileName = String.format("%s_query_plan.txt", queryCanonicalName);
                             File file = new File(dumpDir.getPath(), queryPlanFileName);
                             FileUtils.writeStringToFile(file, JSON.toJSONString(queryPlan), UTF_8);
@@ -276,6 +269,19 @@ public class Main {
             ccWriter.write(queryInfo + "\n");
         }
         ccWriter.close();
+    }
+
+    private static DatabaseConnectorInterface getDatabaseConnector(SystemConfig systemConfig, File loadDir) throws TouchstoneToolChainException, IOException {
+        DatabaseConnectorInterface dbConnector;
+        if (loadDir != null && loadDir.isDirectory()) {
+            List<String> tableNames = loadTableNames(loadDir);
+            Map<String, List<String[]>> queryPlanMap = loadQueryPlans(loadDir);
+            Map<String, Integer> multiColNdvMap = loadMultiColMap(loadDir);
+            dbConnector = new DumpFileConnector(tableNames, queryPlanMap, multiColNdvMap);
+        } else {
+            dbConnector = new TidbConnector(systemConfig);
+        }
+        return dbConnector;
     }
 
     private static void dumpMultiCol(File dumpDir, DatabaseConnectorInterface dbConnector) throws IOException {
@@ -346,19 +352,6 @@ public class Main {
             Schema.initFks(((AbstractDbConnector) dbConnector).databaseMetaData, schemas);
         }
         return schemas;
-    }
-
-
-    private static AbstractAnalyzer getQueryAnalyzer(SystemConfig systemConfig, DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) throws TouchstoneToolChainException {
-        AbstractAnalyzer queryAnalyzer;
-        if (systemConfig.getDatabaseVersion().equals("3.1.0")) {
-            queryAnalyzer = new Tidb3Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
-        } else if (systemConfig.getDatabaseVersion().equals("4.0.0")) {
-            queryAnalyzer = new Tidb4Analyzer(dbConnector, systemConfig.getTidbSelectArgs(), schemas);
-        } else  {
-            throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", systemConfig.getDatabaseVersion()));
-        }
-        return queryAnalyzer;
     }
 
     private static List<String> loadTableNames(File loadDir) throws TouchstoneToolChainException, IOException {

@@ -1,5 +1,8 @@
 package ecnu.db.analyzer.online;
 
+import ecnu.db.analyzer.online.node.ExecutionNode;
+import ecnu.db.analyzer.online.node.NodeTypeTool;
+import ecnu.db.analyzer.online.node.NodeTypeRefFactory;
 import ecnu.db.analyzer.statical.QueryAliasParser;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
@@ -23,14 +26,17 @@ public abstract class AbstractAnalyzer {
     protected int sqlArgIndex = 0;
     protected int lastArgIndex = 0;
     protected HashMap<String, List<String>> argsAndIndex = new HashMap<>();
+    protected NodeTypeTool nodeTypeRef;
+    protected String databaseVersion;
 
-
-    AbstractAnalyzer(DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) {
+    AbstractAnalyzer(String databaseVersion, DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) {
+        this.nodeTypeRef = NodeTypeRefFactory.getNodeTypeRef(databaseVersion);
+        this.databaseVersion = databaseVersion;
         this.dbConnector = dbConnector;
         this.schemas = schemas;
     }
 
-    abstract String[] getSqlInfoColumns();
+    abstract String[] getSqlInfoColumns(String databaseVersion) throws TouchstoneToolChainException;
 
     /**
      * 获取数据库使用的静态解析器的数据类型
@@ -68,7 +74,7 @@ public abstract class AbstractAnalyzer {
 
     public List<String[]> getQueryPlan(String queryCanonicalName, String sql) throws SQLException, TouchstoneToolChainException {
         aliasDic = queryAliasParser.getTableAlias(sql, getDbType());
-        return dbConnector.explainQuery(queryCanonicalName, sql, getSqlInfoColumns());
+        return dbConnector.explainQuery(queryCanonicalName, sql, getSqlInfoColumns(databaseVersion));
     }
 
     /**
@@ -141,11 +147,9 @@ public abstract class AbstractAnalyzer {
                         (double) node.getOutputRows() / schemas.get(tableNameAndSelectCondition.getLeft()).getTableSize() + "];";
                 return new QueryInfo(selectInfo, tableNameAndSelectCondition.getLeft(), node.getOutputRows());
             } else if (node.getType() == ExecutionNode.ExecutionNodeType.scan) {
-                String tableName = node.getInfo().split(",")[0].substring(6).toLowerCase();
-                if (aliasDic != null && aliasDic.containsKey(tableName)) {
-                    tableName = aliasDic.get(tableName);
-                }
-                return new QueryInfo("", tableName, schemas.get(tableName).getTableSize());
+                String tableName = extractTableName(node.getInfo());
+                Schema schema = schemas.get(tableName);
+                return new QueryInfo("", tableName, schema.getTableSize());
             } else {
                 throw new TouchstoneToolChainException("join节点的左右节点已经被访问过");
             }
@@ -181,6 +185,7 @@ public abstract class AbstractAnalyzer {
                                     node.getJoinTag() + "," + 2 * node.getJoinTag() + "];");
                             //设置主键
                             schemas.get(pkTable).setPrimaryKeys(pkCol);
+                            constraintChain.setLastNodeLineCount(node.getOutputRows());
                         } else {
                             if (node.getJoinTag() < 0) {
                                 node.setJoinTag(schemas.get(pkTable).getJoinTag());
@@ -203,6 +208,7 @@ public abstract class AbstractAnalyzer {
                         node.setVisited();
                         constraintChain.addConstraint("[0," + tableNameAndSelectCondition.getRight() + "," +
                                 (double) node.getOutputRows() / constraintChain.getLastNodeLineCount() + "];");
+                        constraintChain.setLastNodeLineCount(node.getOutputRows());
                     }
                 }
             }
@@ -258,4 +264,11 @@ public abstract class AbstractAnalyzer {
             schema.keepJoinTag(success);
         }
     }
+
+    /**
+     * 从operatorInfo里提取tableName
+     * @param operatorInfo
+     * @return
+     */
+    abstract String extractTableName(String operatorInfo);
 }

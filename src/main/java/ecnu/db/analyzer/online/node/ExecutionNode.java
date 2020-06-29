@@ -1,4 +1,4 @@
-package ecnu.db.analyzer.online;
+package ecnu.db.analyzer.online.node;
 
 
 /**
@@ -21,11 +21,11 @@ public class ExecutionNode {
     /**
      * 指向右节点
      */
-    ExecutionNode rightNode;
+    public ExecutionNode rightNode;
     /**
      * 指向左节点
      */
-    ExecutionNode leftNode;
+    public ExecutionNode leftNode;
     /**
      * 节点输出的数据量
      */

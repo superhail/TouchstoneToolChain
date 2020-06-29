@@ -1,7 +1,9 @@
 package ecnu.db.analyzer.online;
 
 import com.alibaba.druid.util.JdbcConstants;
-import ecnu.db.analyzer.online.ExecutionNode.ExecutionNodeType;
+import ecnu.db.analyzer.online.node.ExecutionNode;
+import ecnu.db.analyzer.online.node.ExecutionNode.ExecutionNodeType;
+import ecnu.db.analyzer.online.node.RawNode;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
@@ -17,30 +19,32 @@ import static ecnu.db.utils.CommonUtils.matchPattern;
 /**
  * @author qingshuai.wang
  */
-public class Tidb3Analyzer extends AbstractAnalyzer {
+public class TidbAnalyzer extends AbstractAnalyzer {
     private static final Pattern ROW_COUNTS = Pattern.compile("rows:[0-9]*");
     private static final Pattern INNER_JOIN_OUTER_KEY = Pattern.compile("outer key:.*,");
     private static final Pattern INNER_JOIN_INNER_KEY = Pattern.compile("inner key:.*");
     private static final Pattern JOIN_EQ_OPERATOR = Pattern.compile("equal:\\[.*]");
     private static final Pattern PLAN_ID = Pattern.compile("([a-zA-Z]+_[0-9]+)");
     private static final Pattern JOIN_EQ_SUB_EXPR = Pattern.compile("eq\\(([a-zA-Z0-9\\_\\$\\.]+)\\, ([a-zA-Z0-9\\_\\$\\.]+)\\)");
-    HashSet<String> readerNodeTypes = new HashSet<>(Arrays.asList("TableReader", "IndexReader", "IndexLookUp"));
-    HashSet<String> passNodeTypes = new HashSet<>(Arrays.asList("Projection", "TopN", "Sort", "HashAgg", "StreamAgg", "IndexScan"));
-    HashSet<String> joinNodeTypes = new HashSet<>(Arrays.asList("HashRightJoin", "HashLeftJoin", "IndexMergeJoin", "IndexHashJoin", "IndexJoin", "MergeJoin"));
-    HashSet<String> filterNodeTypes = new HashSet<>(Collections.singletonList("Selection"));
-    HashSet<String> scanNodeTypes = new HashSet<>(Collections.singletonList("TableScan"));
+    private static final Pattern INNER_JOIN = Pattern.compile("inner join");
     HashMap<String, String> tidbSelectArgs;
 
 
-    public Tidb3Analyzer(DatabaseConnectorInterface dbConnector, HashMap<String, String> tidbSelectArgs,
-                         HashMap<String, Schema> schemas) {
-        super(dbConnector, schemas);
+    public TidbAnalyzer(String databaseVersion, DatabaseConnectorInterface dbConnector, HashMap<String, String> tidbSelectArgs,
+                        HashMap<String, Schema> schemas) {
+        super(databaseVersion, dbConnector, schemas);
         this.tidbSelectArgs = tidbSelectArgs;
     }
 
     @Override
-    String[] getSqlInfoColumns() {
-        return new String[]{"id", "operator info", "execution info"};
+    String[] getSqlInfoColumns(String databaseVersion) throws TouchstoneToolChainException {
+        if ("3.1.0".equals(databaseVersion)) {
+            return new String[]{"id", "operator info", "execution info"};
+        } else if ("4.0.0".equals(databaseVersion)) {
+            return new String[]{"id", "operator info", "actRows", "access object"};
+        } else {
+            throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", databaseVersion));
+        }
     }
 
     @Override
@@ -55,7 +59,31 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
     }
 
     /**
+     * TODO 支持 semi join, outer join
      * 合并节点，删除query plan中不需要或者不支持的节点，并根据节点类型提取对应信息
+     * 关于join下推到tikv节点的处理:
+     * 1. 有selection的下推
+     *             IndexJoin                                         Filter
+     *            /       \                                          /
+     *      leftNode      IndexLookup              ===>>>          Join
+     *                     /        \                             /    \
+     *             IndexRangeScan   Selection               leftNode  Scan
+     *                             /
+     *                           Scan
+     *
+     * 2. 没有selection的下推(leftNode中有Selection节点)
+     *             IndexJoin                                         Join
+     *            /       \                                         /    \
+     *      leftNode      IndexLookup              ===>>>     leftNode   Scan
+     *                     /        \
+     *             IndexRangeScan   Scan
+     *
+     * 3. 没有selection的下推(leftNode中没有Selection节点，但右边扫描节点上有索引)
+     *             IndexJoin                                         Join
+     *            /       \                                         /    \
+     *      leftNode      IndexReader              ===>>>     leftNode   Scan
+     *                     /
+     *             IndexRangeScan
      *
      * @param rawNode 需要处理的query plan树
      * @return 处理好的树
@@ -66,42 +94,68 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
         if (rawNode == null) {
             return null;
         }
-        String[] subQueryPlan = rawNode.data;
-        String planId = subQueryPlan[0], operatorInfo = subQueryPlan[1], executionInfo = subQueryPlan[2];
-        planId = matchPattern(PLAN_ID, planId).get(0).get(0);
         Matcher matcher;
         String nodeType = rawNode.nodeType;
-        if (passNodeTypes.contains(nodeType)) {
+        if (nodeTypeRef.isPassNode(nodeType)) {
             return rawNode.left == null ? null : buildExecutionTree(rawNode.left);
         }
-        int rowCount = (matcher = ROW_COUNTS.matcher(executionInfo)).find() ?
-                Integer.parseInt(matcher.group(0).split(":")[1]) : 0;
         ExecutionNode node;
         // 处理底层的TableScan
-        if (scanNodeTypes.contains(nodeType)) {
-            return new ExecutionNode(planId, ExecutionNodeType.scan, rowCount, operatorInfo);
-        } else if (filterNodeTypes.contains(nodeType)) {
-            node = new ExecutionNode(planId, ExecutionNodeType.filter, rowCount, operatorInfo);
+        if (nodeTypeRef.isTableScanNode(nodeType)) {
+            return new ExecutionNode(rawNode.id, ExecutionNodeType.scan, rawNode.rowCount, rawNode.operatorInfo);
+        } else if (nodeTypeRef.isFilterNode(nodeType)) {
+            node = new ExecutionNode(rawNode.id, ExecutionNodeType.filter, rawNode.rowCount, rawNode.operatorInfo);
             // 跳过底部的TableScan
-            if (rawNode.left != null && scanNodeTypes.contains(rawNode.left.nodeType)) {
+            if (rawNode.left != null && nodeTypeRef.isTableScanNode(rawNode.left.nodeType)) {
                 return node;
             }
             node.leftNode = rawNode.left == null ? null : buildExecutionTree(rawNode.left);
             node.rightNode = rawNode.right == null ? null : buildExecutionTree(rawNode.right);
-        } else if (joinNodeTypes.contains(nodeType)) {
-            node = new ExecutionNode(planId, ExecutionNodeType.join, rowCount, operatorInfo);
+        } else if (nodeTypeRef.isJoinNode(nodeType)) {
+            if (matchPattern(INNER_JOIN, rawNode.operatorInfo).isEmpty()) {
+                throw new TouchstoneToolChainException(String.format("不支持的join类型, operatorInfo{%s}", rawNode.operatorInfo));
+            }
+            // 处理IndexJoin有selection的下推到tikv情况
+            if (nodeTypeRef.isReaderNode(rawNode.right.nodeType)
+                    && rawNode.right.right != null
+                    && nodeTypeRef.isIndexScanNode(rawNode.right.left.nodeType)
+                    && nodeTypeRef.isFilterNode(rawNode.right.right.nodeType)) {
+                node = new ExecutionNode(rawNode.right.right.id, ExecutionNodeType.filter, rawNode.rowCount, rawNode.right.right.operatorInfo);
+                node.leftNode = new ExecutionNode(rawNode.right.left.id, ExecutionNodeType.join, rawNode.right.left.rowCount, rawNode.operatorInfo);
+                String tableName = extractTableName(rawNode.right.right.left.operatorInfo);
+                node.leftNode.rightNode = new ExecutionNode(null, ExecutionNodeType.scan, schemas.get(tableName).getTableSize(), "table:" + tableName);
+                node.leftNode.leftNode = buildExecutionTree(rawNode.left);
+                return node;
+            }
+            node = new ExecutionNode(rawNode.id, ExecutionNodeType.join, rawNode.rowCount, rawNode.operatorInfo);
             node.leftNode = rawNode.left == null ? null : buildExecutionTree(rawNode.left);
             node.rightNode = rawNode.right == null ? null : buildExecutionTree(rawNode.right);
-        } else if (readerNodeTypes.contains(nodeType)) {
-            // 右侧节点非空且不属于跳过的节点，跳过左侧节点
-            if (rawNode.right != null && !passNodeTypes.contains(rawNode.right.nodeType)) {
-                return buildExecutionTree(rawNode.right);
+        } else if (nodeTypeRef.isReaderNode(nodeType)) {
+            if (rawNode.right != null) {
+                List<List<String>> matches = matchPattern(JOIN_EQ_SUB_EXPR, rawNode.left.operatorInfo);
+                // 处理IndexJoin没有selection的下推到tikv情况
+                if (!matches.isEmpty() && nodeTypeRef.isTableScanNode(rawNode.right.nodeType)) {
+                    String tableName = extractTableName(rawNode.right.operatorInfo);
+                    node = new ExecutionNode(rawNode.id, ExecutionNodeType.scan, schemas.get(tableName).getTableSize(), rawNode.right.operatorInfo);
+                // 其他情况跳过左侧节点
+                } else {
+                    node = buildExecutionTree(rawNode.right);
+                }
             }
             // 处理IndexReader后接一个IndexScan的情况
-            else if ("IndexScan".equals(rawNode.left.nodeType)) {
-                return new ExecutionNode(planId, ExecutionNodeType.scan, rowCount, rawNode.left.data[1]);
+            else if (nodeTypeRef.isIndexScanNode(rawNode.left.nodeType)) {
+                String tableName = extractTableName(rawNode.left.operatorInfo);
+                int tableSize = schemas.get(tableName).getTableSize();
+                // 处理IndexJoin没有selection的下推到tikv情况
+                if (rawNode.left.rowCount != tableSize) {
+                    node = new ExecutionNode(rawNode.left.id, ExecutionNodeType.scan, tableSize, rawNode.left.operatorInfo);
+                // 正常情况
+                } else{
+                    node = new ExecutionNode(rawNode.left.id, ExecutionNodeType.scan, rawNode.left.rowCount, rawNode.left.operatorInfo);
+                }
+            } else {
+                node = buildExecutionTree(rawNode.left);
             }
-            node = buildExecutionTree(rawNode.left);
         } else {
             throw new TouchstoneToolChainException("未支持的查询树Node，类型为" + nodeType);
         }
@@ -114,24 +168,39 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
      * @param queryPlan explain analyze的结果
      * @return 生成好的树
      */
-    private RawNode buildRawNodeTree(List<String[]> queryPlan) {
-        Stack<Pair<Integer, RawNode>> pStack = new Stack<>();
+    private RawNode buildRawNodeTree(List<String[]> queryPlan) throws TouchstoneToolChainException {
+        Deque<Pair<Integer, RawNode>> pStack = new ArrayDeque<>();
         List<List<String>> matches = matchPattern(PLAN_ID, queryPlan.get(0)[0]);
         String nodeType = matches.get(0).get(0).split("_")[0];
-        RawNode rawNodeRoot = new RawNode(null, null, nodeType, queryPlan.get(0)), rawNode;
+        String[] subQueryPlanInfo = extractSubQueryPlanInfo(databaseVersion, queryPlan.get(0));
+        String planId = matches.get(0).get(0), operatorInfo = subQueryPlanInfo[1], executionInfo = subQueryPlanInfo[2];
+        Matcher matcher;
+        int rowCount = (matcher = ROW_COUNTS.matcher(executionInfo)).find() ?
+                Integer.parseInt(matcher.group(0).split(":")[1]) : 0;
+        RawNode rawNodeRoot = new RawNode(planId, null, null, nodeType, operatorInfo, rowCount), rawNode;
         pStack.push(Pair.of(0, rawNodeRoot));
         for (String[] subQueryPlan : queryPlan.subList(1, queryPlan.size())) {
-            matches = matchPattern(PLAN_ID, subQueryPlan[0]);
+            subQueryPlanInfo = extractSubQueryPlanInfo(databaseVersion, subQueryPlan);
+            matches = matchPattern(PLAN_ID, subQueryPlanInfo[0]);
+            planId = matches.get(0).get(0);
+            operatorInfo = subQueryPlanInfo[1];
+            executionInfo = subQueryPlanInfo[2];
             nodeType = matches.get(0).get(0).split("_")[0];
-            rawNode = new RawNode(null, null, nodeType, subQueryPlan);
-            String planId = subQueryPlan[0];
-            int level = (planId.split("─")[0].length() + 1) / 2;
-            while (pStack.peek().getKey() > level) {
+            rowCount = (matcher = ROW_COUNTS.matcher(executionInfo)).find() ?
+                    Integer.parseInt(matcher.group(0).split(":")[1]) : 0;
+            rawNode = new RawNode(planId, null, null, nodeType, operatorInfo, rowCount);
+            int level = (subQueryPlan[0].split("─")[0].length() + 1) / 2;
+            while (!pStack.isEmpty() && pStack.peek().getKey() > level) {
                 pStack.pop(); // pop直到找到同一个层级的节点
+            }
+            if (pStack.isEmpty()) {
+                throw new TouchstoneToolChainException("pStack不应为空");
             }
             if (pStack.peek().getKey().equals(level)) {
                 pStack.pop();
-                assert !pStack.isEmpty();
+                if (pStack.isEmpty()) {
+                    throw new TouchstoneToolChainException("pStack不应为空");
+                }
                 pStack.peek().getValue().right = rawNode;
             } else {
                 pStack.peek().getValue().left = rawNode;
@@ -139,6 +208,20 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
             pStack.push(Pair.of(level, rawNode));
         }
         return rawNodeRoot;
+    }
+
+    private String[] extractSubQueryPlanInfo(String databaseVersion, String[] data) throws TouchstoneToolChainException {
+        if ("3.1.0".equals(databaseVersion)) {
+            return data;
+        } else if ("4.0.0".equals(databaseVersion)) {
+            String[] ret = new String[3];
+            ret[0] = data[0];
+            ret[1] = data[3].isEmpty()? data[1]: String.format("%s,%s", data[3], data[1]);
+            ret[2] = "rows:" + data[2];
+            return ret;
+        } else {
+            throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", databaseVersion));
+        }
     }
 
     /**
@@ -160,7 +243,6 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
             if (eqCondition.groupCount() > 1) {
                 throw new UnsupportedOperationException();
             }
-            String[] eqInfos = eqCondition.group(0).substring(0, eqCondition.group(0).length() - 1).split("eq\\(");
             List<List<String>> matches = matchPattern(JOIN_EQ_SUB_EXPR, joinInfo);
             String[] leftJoinInfos = matches.get(0).get(1).split("\\."), rightJoinInfos = matches.get(0).get(2).split("\\.");
             leftTable = leftJoinInfos[1];
@@ -337,6 +419,15 @@ public class Tidb3Analyzer extends AbstractAnalyzer {
 
 
         return new MutablePair<>(tableName, conditionFinalString.toString());
+    }
+
+    @Override
+    String extractTableName(String operatorInfo) {
+        String tableName = operatorInfo.split(",")[0].substring(6).toLowerCase();
+        if (aliasDic != null && aliasDic.containsKey(tableName)) {
+            tableName = aliasDic.get(tableName);
+        }
+        return tableName;
     }
 
     public String convertOperator(String tidbOperator) throws TouchstoneToolChainException {
