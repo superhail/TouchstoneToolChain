@@ -193,10 +193,14 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             while (!pStack.isEmpty() && pStack.peek().getKey() > level) {
                 pStack.pop(); // pop直到找到同一个层级的节点
             }
-            assert !pStack.isEmpty();
+            if (pStack.isEmpty()) {
+                throw new TouchstoneToolChainException("pStack不应为空");
+            }
             if (pStack.peek().getKey().equals(level)) {
                 pStack.pop();
-                assert !pStack.isEmpty();
+                if (pStack.isEmpty()) {
+                    throw new TouchstoneToolChainException("pStack不应为空");
+                }
                 pStack.peek().getValue().right = rawNode;
             } else {
                 pStack.peek().getValue().left = rawNode;
@@ -239,7 +243,6 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             if (eqCondition.groupCount() > 1) {
                 throw new UnsupportedOperationException();
             }
-            String[] eqInfos = eqCondition.group(0).substring(0, eqCondition.group(0).length() - 1).split("eq\\(");
             List<List<String>> matches = matchPattern(JOIN_EQ_SUB_EXPR, joinInfo);
             String[] leftJoinInfos = matches.get(0).get(1).split("\\."), rightJoinInfos = matches.get(0).get(2).split("\\.");
             leftTable = leftJoinInfos[1];
@@ -416,6 +419,15 @@ public class TidbAnalyzer extends AbstractAnalyzer {
 
 
         return new MutablePair<>(tableName, conditionFinalString.toString());
+    }
+
+    @Override
+    String extractTableName(String operatorInfo) {
+        String tableName = operatorInfo.split(",")[0].substring(6).toLowerCase();
+        if (aliasDic != null && aliasDic.containsKey(tableName)) {
+            tableName = aliasDic.get(tableName);
+        }
+        return tableName;
     }
 
     public String convertOperator(String tidbOperator) throws TouchstoneToolChainException {

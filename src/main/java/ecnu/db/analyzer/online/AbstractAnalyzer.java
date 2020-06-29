@@ -1,7 +1,7 @@
 package ecnu.db.analyzer.online;
 
 import ecnu.db.analyzer.online.node.ExecutionNode;
-import ecnu.db.analyzer.online.node.NodeTypeRef;
+import ecnu.db.analyzer.online.node.NodeTypeTool;
 import ecnu.db.analyzer.online.node.NodeTypeRefFactory;
 import ecnu.db.analyzer.statical.QueryAliasParser;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
@@ -26,7 +26,7 @@ public abstract class AbstractAnalyzer {
     protected int sqlArgIndex = 0;
     protected int lastArgIndex = 0;
     protected HashMap<String, List<String>> argsAndIndex = new HashMap<>();
-    protected NodeTypeRef nodeTypeRef;
+    protected NodeTypeTool nodeTypeRef;
     protected String databaseVersion;
 
     AbstractAnalyzer(String databaseVersion, DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) {
@@ -264,11 +264,10 @@ public abstract class AbstractAnalyzer {
         }
     }
 
-    protected String extractTableName(String operatorInfo) {
-        String tableName = operatorInfo.split(",")[0].substring(6).toLowerCase();
-        if (aliasDic != null && aliasDic.containsKey(tableName)) {
-            tableName = aliasDic.get(tableName);
-        }
-        return tableName;
-    }
+    /**
+     * 从operatorInfo里提取tableName
+     * @param operatorInfo
+     * @return
+     */
+    abstract String extractTableName(String operatorInfo);
 }
