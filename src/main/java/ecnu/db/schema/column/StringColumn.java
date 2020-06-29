@@ -38,7 +38,6 @@ public class StringColumn extends AbstractColumn {
 
     @Override
     public String formatDataDistribution() {
-        // TODO
         return columnName + ";" + nullPercentage + ';' + avgLength + ';' + maxLength + ';' + ndv;
     }
 }
