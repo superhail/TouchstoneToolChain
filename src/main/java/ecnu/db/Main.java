@@ -50,6 +50,9 @@ public class Main {
         for (Map.Entry<String, List<String>> argAndIndexes : argsAndIndex.entrySet()) {
             int lastIndex = 0;
             int count = 0;
+            if (argAndIndexes.getKey().contains("isnull")) {
+                continue;
+            }
             if (argAndIndexes.getKey().contains("in(")) {
                 while (lastIndex != -1) {
                     lastIndex = sql.indexOf("in (", lastIndex);
