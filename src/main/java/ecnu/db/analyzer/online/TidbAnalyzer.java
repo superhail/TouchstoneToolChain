@@ -357,6 +357,10 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         List<List<String>> matches = matchPattern(SELECT_CONDITION_EXPR, conditionExpr);
         assert matches.size() == 1;
         String operator = matches.get(0).get(1);
+        if (conditionExpr.startsWith("not") && !"not".equals(operator)) {
+            // 补上被去掉的not
+            operator = "not " + operator;
+        }
         if (!operator.startsWith("not")) {
             operator = convertOperator(operator);
         }
@@ -387,15 +391,14 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             String[] canonicalColName = firstArgument.split("\\.");
             tableName = canonicalColName[1];
             colName = canonicalColName[2];
-
         }
         else if ("not in".equals(operator) || "in".equals(operator)) {
-            int inSize = matches.get(0).get(2).split(", ").length;
+            int inSize = matches.get(0).get(2).split(", ").length - 1;
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             String[] canonicalColName = firstArgument.split("\\.");
             tableName = canonicalColName[1];
             colName = canonicalColName[2];
-            operator = String.format("in(%d)", inSize);
+            operator = String.format("%s(%d)", operator, inSize);
         }
         else {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
