@@ -28,6 +28,7 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static ecnu.db.utils.CommonUtils.isEndOfConditionExpr;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
@@ -35,9 +36,17 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  */
 public class Main {
 
-    public static String changeSql(String sql, HashMap<String, List<String>> argsAndIndex, ArrayList<String> cannotFindArgs,
-                                   ArrayList<String> conflictArgs) throws TouchstoneToolChainException {
-        HashSet<String> stopSqlSwap = new HashSet<>(Arrays.asList("and", "limit", "group", ")"));
+    /**
+     * 模板化SQL语句
+     * @param sql 需要处理的sql语句
+     * @param argsAndIndex 需要替换的arguments
+     * @param cannotFindArgs 找不到的arguments
+     * @param conflictArgs 矛盾的arguments
+     * @return
+     * @throws TouchstoneToolChainException
+     */
+    public static String templatizeSql(String sql, HashMap<String, List<String>> argsAndIndex, ArrayList<String> cannotFindArgs,
+                                       ArrayList<String> conflictArgs) throws TouchstoneToolChainException {
         for (Map.Entry<String, List<String>> argAndIndexes : argsAndIndex.entrySet()) {
             int lastIndex = 0;
             int count = 0;
@@ -77,7 +86,7 @@ public class Main {
                     }
                     for (; i < sqlTuples.length; i++) {
                         if (!hasBetween) {
-                            if (stopSqlSwap.contains(sqlTuples[i].toLowerCase()) || sqlTuples[i].contains(";")) {
+                            if (isEndOfConditionExpr(sqlTuples[i].toLowerCase()) || sqlTuples[i].contains(";")) {
                                 break;
                             }
                         } else {
@@ -179,7 +188,7 @@ public class Main {
 
                         ArrayList<String> cannotFindArgs = new ArrayList<>();
                         ArrayList<String> conflictArgs = new ArrayList<>();
-                        sql = changeSql(sql, queryAnalyzer.getArgsAndIndex(), cannotFindArgs, conflictArgs);
+                        sql = templatizeSql(sql, queryAnalyzer.getArgsAndIndex(), cannotFindArgs, conflictArgs);
                         ArrayList<String> reProductArgs = new ArrayList<>();
 
                         for (String cannotFindArg : cannotFindArgs) {
@@ -191,22 +200,22 @@ public class Main {
                                 HashMap<String, List<String>> tempInfo = new HashMap<>();
                                 tempInfo.put(cannotFindArg.split(" ")[0] + " >=", Collections.singletonList(indexInfos[1]));
                                 ArrayList<String> tempList = new ArrayList<>();
-                                sql = changeSql(sql, tempInfo, tempList, new ArrayList<>());
+                                sql = templatizeSql(sql, tempInfo, tempList, new ArrayList<>());
                                 if (tempList.size() != 0) {
                                     tempInfo.clear();
                                     tempList.clear();
                                     tempInfo.put(cannotFindArg.split(" ")[0] + " >", Collections.singletonList(indexInfos[1]));
-                                    sql = changeSql(sql, tempInfo, tempList, new ArrayList<>());
+                                    sql = templatizeSql(sql, tempInfo, tempList, new ArrayList<>());
                                 }
                                 tempInfo.clear();
                                 tempList.clear();
                                 tempInfo.put(cannotFindArg.split(" ")[0] + " <=", Collections.singletonList(indexInfos[3]));
-                                sql = changeSql(sql, tempInfo, tempList, new ArrayList<>());
+                                sql = templatizeSql(sql, tempInfo, tempList, new ArrayList<>());
                                 if (tempList.size() != 0) {
                                     tempInfo.clear();
                                     tempList.clear();
                                     tempInfo.put(cannotFindArg.split(" ")[0] + " <", Collections.singletonList(indexInfos[3]));
-                                    sql = changeSql(sql, tempInfo, tempList, new ArrayList<>());
+                                    sql = templatizeSql(sql, tempInfo, tempList, new ArrayList<>());
                                 }
                                 reProductArgs.add(cannotFindArg);
                             }
