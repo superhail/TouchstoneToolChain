@@ -1,7 +1,6 @@
 package ecnu.db.utils;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -9,6 +8,7 @@ import java.util.regex.Pattern;
  * @author xuechao.lian
  */
 public class CommonUtils {
+    private static final HashSet<String> whereDelimiters = new HashSet<>(Arrays.asList("and", "limit", "group", ")", "or", "order", "||", "&&"));
     /**
      * 获取正则表达式的匹配
      * @param pattern
@@ -27,5 +27,14 @@ public class CommonUtils {
         }
 
         return ret;
+    }
+
+    /**
+     * 检查是否是SQL语句里where_condition的边界token
+     * @param token 需要检查的token
+     * @return
+     */
+    public static boolean isEndOfConditionExpr(String token) {
+        return whereDelimiters.contains(token);
     }
 }

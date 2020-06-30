@@ -153,7 +153,9 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
         "EQ": "=",
         "NE": "<>",
         "LIKE": "like",
-        "IN": "in"
+        "IN": "in",
+        "ISNULL": "isnull",
+        "OR": "or"
     }
 }
 ```

@@ -1,18 +1,19 @@
 package ecnu.db.analyzer.online;
 
 import com.alibaba.druid.util.JdbcConstants;
+import com.google.common.collect.Multimap;
 import ecnu.db.analyzer.online.node.ExecutionNode;
 import ecnu.db.analyzer.online.node.ExecutionNode.ExecutionNodeType;
 import ecnu.db.analyzer.online.node.RawNode;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
-import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static ecnu.db.utils.CommonUtils.matchPattern;
 
@@ -25,7 +26,8 @@ public class TidbAnalyzer extends AbstractAnalyzer {
     private static final Pattern INNER_JOIN_INNER_KEY = Pattern.compile("inner key:.*");
     private static final Pattern JOIN_EQ_OPERATOR = Pattern.compile("equal:\\[.*]");
     private static final Pattern PLAN_ID = Pattern.compile("([a-zA-Z]+_[0-9]+)");
-    private static final Pattern JOIN_EQ_SUB_EXPR = Pattern.compile("eq\\(([a-zA-Z0-9\\_\\$\\.]+)\\, ([a-zA-Z0-9\\_\\$\\.]+)\\)");
+    private static final Pattern EQ_OPERATOR = Pattern.compile("eq\\(([a-zA-Z0-9_$.]+), ([a-zA-Z0-9_$.]+)\\)");
+    private static final Pattern SELECT_CONDITION_EXPR = Pattern.compile("([a-z_0-9]+)\\((.+)\\)");
     private static final Pattern INNER_JOIN = Pattern.compile("inner join");
     HashMap<String, String> tidbSelectArgs;
 
@@ -132,7 +134,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             node.rightNode = rawNode.right == null ? null : buildExecutionTree(rawNode.right);
         } else if (nodeTypeRef.isReaderNode(nodeType)) {
             if (rawNode.right != null) {
-                List<List<String>> matches = matchPattern(JOIN_EQ_SUB_EXPR, rawNode.left.operatorInfo);
+                List<List<String>> matches = matchPattern(EQ_OPERATOR, rawNode.left.operatorInfo);
                 // 处理IndexJoin没有selection的下推到tikv情况
                 if (!matches.isEmpty() && nodeTypeRef.isTableScanNode(rawNode.right.nodeType)) {
                     String tableName = extractTableName(rawNode.right.operatorInfo);
@@ -243,7 +245,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             if (eqCondition.groupCount() > 1) {
                 throw new UnsupportedOperationException();
             }
-            List<List<String>> matches = matchPattern(JOIN_EQ_SUB_EXPR, joinInfo);
+            List<List<String>> matches = matchPattern(EQ_OPERATOR, joinInfo);
             String[] leftJoinInfos = matches.get(0).get(1).split("\\."), rightJoinInfos = matches.get(0).get(2).split("\\.");
             leftTable = leftJoinInfos[1];
             rightTable = rightJoinInfos[1];
@@ -301,124 +303,145 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         return result;
     }
 
+    @Override
+    WhereConditionInfo buildConditionMap(String operatorInfo, Multimap<String, String> conditions) throws TouchstoneToolChainException {
+        List<String> conditionExprs = splitCondition(operatorInfo);
+
+        boolean isOr = false, useAlias = false;
+        assert conditionExprs.size() > 0;
+        if (conditionExprs.size() == 1 && conditionExprs.get(0).startsWith("or(")) {
+            isOr = true;
+        }
+        String tableName = null;
+        for (String conditionExpr: conditionExprs) {
+            List<String> groups = matchPattern(SELECT_CONDITION_EXPR, conditionExpr).get(0);
+            convertOperator(groups.get(1));
+            String currTableName = buildConditionMapIter(groups.get(0), isOr, conditions);
+            if (tableName == null) {
+                tableName = currTableName;
+                if (aliasDic != null && aliasDic.containsKey(tableName)) {
+                    useAlias = true;
+                }
+            }
+            if(!tableName.equals(currTableName)) {
+                throw new TouchstoneToolChainException("select的表名不一致");
+            }
+        }
+
+        WhereConditionInfo conditionInfo = new WhereConditionInfo();
+        conditionInfo.isOr = isOr;
+        conditionInfo.useAlias = useAlias;
+        conditionInfo.tableName = tableName;
+
+        return conditionInfo;
+    }
 
     /**
-     * 分析传入的select 过滤条件，传出表名和格式化后的condition
-     * todo 增加对or的支持
-     *
-     * @param selectCondition 传入的select条件语句
-     * @return 表名和格式化后的condition
+     * buildConditionMap的内部迭代方法
+     * @param conditionExpr 需要处理的condition表达式
+     * @param isOr 是否为or类型的condition
+     * @param conditions 用于创建的multimap
+     * @return 表名
+     * @throws TouchstoneToolChainException 不支持or和and混用, select的表名不一致
      */
-    @Override
-    Pair<String, String> analyzeSelectCondition(String selectCondition) throws TouchstoneToolChainException {
-        String tableName = null;
-        HashMap<String, String> conditionString = new HashMap<>();
-        boolean useAlias = false;
-        String[] conditions = selectCondition.split("\\),");
-        int inCount = -1;
-        for (String condition : conditions) {
-            String[] conditionInfos = condition.split("\\(");
-            String operator;
-            String columnName;
-            if ("not".equals(conditionInfos[0].trim())) {
-                operator = "not " + convertOperator(conditionInfos[1]);
-                String[] operatorInfo = conditionInfos[2].split(",");
-                columnName = operatorInfo[0].split("\\.")[2];
-                if ("not isnull".equals(operator)) {
-                    while (columnName.endsWith(")")) {
-                        columnName = columnName.substring(0, columnName.length() - 1);
-                    }
-                }
-                if (tableName == null) {
-                    tableName = operatorInfo[0].split("\\.")[1];
-                    if (aliasDic != null && aliasDic.containsKey(tableName)) {
-                        useAlias = true;
-                    }
-                } else {
-                    if (!tableName.equals(operatorInfo[0].split("\\.")[1])) {
-                        throw new TouchstoneToolChainException("select的表名不一致");
-                    }
-                }
-
-                if ("not in".equals(operator)) {
-                    operator += "(" + (operatorInfo.length - 1) + ")";
-                    inCount = operatorInfo.length - 1;
-                }
-            } else {
-                operator = convertOperator(conditionInfos[0]);
-                String[] operatorInfo = conditionInfos[1].split(",");
-                columnName = operatorInfo[0].split("\\.")[2];
-                if ("isnull".equals(operator)) {
-                    while (columnName.endsWith(")")) {
-                        columnName = columnName.substring(0, columnName.length() - 1);
-                    }
-                }
-                if (tableName == null) {
-                    tableName = operatorInfo[0].split("\\.")[1];
-                    if (aliasDic != null && aliasDic.containsKey(tableName)) {
-                        useAlias = true;
-                    }
-                } else {
-                    if (!tableName.equals(operatorInfo[0].split("\\.")[1])) {
-                        throw new TouchstoneToolChainException("select的表名不一致");
-                    }
-                }
-                if ("in".equals(operator)) {
-                    operator += "(" + (operatorInfo.length - 1) + ")";
-                    inCount = operatorInfo.length - 1;
-                }
-            }
-            if (conditionString.containsKey(columnName)) {
-                conditionString.put(columnName, "bet");
-            } else {
-                conditionString.put(columnName, operator);
-            }
+    private String buildConditionMapIter(String conditionExpr, boolean isOr, Multimap<String, String> conditions) throws TouchstoneToolChainException {
+        List<List<String>> matches = matchPattern(SELECT_CONDITION_EXPR, conditionExpr);
+        assert matches.size() == 1;
+        String operator = matches.get(0).get(1);
+        if (conditionExpr.startsWith("not") && !"not".equals(operator)) {
+            // 补上被去掉的not
+            operator = "not " + operator;
         }
-        if (aliasDic != null && aliasDic.containsKey(tableName)) {
-            tableName = aliasDic.get(tableName);
+        if (!operator.startsWith("not")) {
+            operator = convertOperator(operator);
         }
-        StringBuilder conditionFinalString = new StringBuilder();
-        for (Map.Entry<String, String> stringStringEntry : conditionString.entrySet()) {
-            conditionFinalString.append(stringStringEntry.getKey()).append("@").append(stringStringEntry.getValue()).append("#");
-            String columnName = stringStringEntry.getKey();
-            String operator = stringStringEntry.getValue();
-            String selectArgName = columnName + " " + operator;
-            if (useAlias) {
-                selectArgName = tableName + "." + selectArgName;
+        String tableName, colName;
+        if ("or".equals(operator) || "and".equals(operator)) {
+            if (!isOr && "or".equals(operator)) {
+                throw new TouchstoneToolChainException("不支持or和and混用");
             }
-            StringBuilder selectArgs = new StringBuilder();
-
-            if (operator.contains("in")) {
-                int dateOrNot = schemas.get(tableName).isDate(columnName) ? 1 : 0;
-                for (int i = 0; i < inCount; i++) {
-                    selectArgs.append("'#").append(sqlArgIndex).append(",").append(i).append(",").append(dateOrNot).append("#', ");
-                }
-                sqlArgIndex++;
-                selectArgs = new StringBuilder("(" + selectArgs.substring(0, selectArgs.length() - 2) + ")");
-            } else {
-                if ("bet".equals(operator)) {
-                    selectArgs.append("ween '#").append(sqlArgIndex).append(",0,").append(schemas.get(tableName)
-                            .isDate(columnName) ? 1 : 0).append("#' and '#").append(sqlArgIndex++).append(",1,")
-                            .append(schemas.get(tableName).isDate(columnName) ? 1 : 0).append("#'");
-                } else {
-                    selectArgs.append("#").append(sqlArgIndex++).append(",0,").append(schemas.get(tableName)
-                            .isDate(columnName) ? 1 : 0).append("#");
-                }
+            if (isOr && "and".equals(operator)) {
+                throw new TouchstoneToolChainException("不支持or和and混用");
             }
-            if (argsAndIndex.containsKey(selectArgName)) {
-                argsAndIndex.get(selectArgName).add(selectArgs.toString());
-            } else {
-                List<String> value = new ArrayList<>();
-                value.add(selectArgs.toString());
-                argsAndIndex.put(selectArgName, value);
+            List<String> conditionExprs = splitCondition(matches.get(0).get(2));
+            assert conditionExprs.size() == 2;
+            tableName = buildConditionMapIter(conditionExprs.get(0), isOr, conditions);
+            if (!tableName.equals(buildConditionMapIter(conditionExprs.get(1), isOr, conditions))) {
+                throw new TouchstoneToolChainException("select的表名不一致");
             }
+            return tableName;
         }
-        if (conditionString.size() > 1) {
-            conditionFinalString.append("and");
+        else if ("not".equals(operator)) {
+            List<List<String>> subMatches = matchPattern(SELECT_CONDITION_EXPR, conditionExpr);
+            assert subMatches.size() == 1;
+            tableName = buildConditionMapIter("not " + subMatches.get(0).get(2), isOr, conditions);
+            return tableName;
+        }
+        else if ("not isnull".equals(operator) || "isnull".equals(operator)) {
+            String firstArgument = matches.get(0).get(2).split(", ")[0];
+            String[] canonicalColName = firstArgument.split("\\.");
+            tableName = canonicalColName[1];
+            colName = canonicalColName[2];
+        }
+        else if ("not in".equals(operator) || "in".equals(operator)) {
+            int inSize = matches.get(0).get(2).split(", ").length - 1;
+            String firstArgument = matches.get(0).get(2).split(", ")[0];
+            String[] canonicalColName = firstArgument.split("\\.");
+            tableName = canonicalColName[1];
+            colName = canonicalColName[2];
+            operator = String.format("%s(%d)", operator, inSize);
+        }
+        else {
+            String firstArgument = matches.get(0).get(2).split(", ")[0];
+            String[] canonicalColName = firstArgument.split("\\.");
+            tableName = canonicalColName[1];
+            colName = canonicalColName[2];
         }
 
+        Collection<String> oriOperators = conditions.get(colName);
+        String finalOperator = operator;
+        List<String> leftBetOperator = oriOperators.stream()
+                .filter((oriOperator) -> (">=".equals(oriOperator) && "<=".equals(finalOperator))
+                        || ("<=".equals(oriOperator) && ">=".equals(finalOperator)))
+                .collect(Collectors.toList());
+        if (leftBetOperator.size() > 0) {
+            assert leftBetOperator.size() == 1;
+            conditions.remove(colName, leftBetOperator.get(0));
+            conditions.put(colName, "bet");
+        } else {
+            conditions.put(colName, operator);
+        }
 
-        return new MutablePair<>(tableName, conditionFinalString.toString());
+        return tableName;
+    }
+
+    /**
+     * 把一个condition_expr的参数部分分割成一个个小的condition_expr
+     * @param argumentExpr condition_expr的参数部分
+     * @return 分割好的condition_expr
+     */
+    List<String> splitCondition(String argumentExpr) {
+        Deque<Character> characterStack = new ArrayDeque<>();
+        List<String> conditionExprs = new LinkedList<>();
+        int i = 0, j = 0;
+        while(i < argumentExpr.length()) {
+            while(j < argumentExpr.length()) {
+                char c = argumentExpr.charAt(j);
+                if (c == '(') {
+                    characterStack.push(c);
+                } else if (c == ')' && characterStack.size() == 1) {
+                    characterStack.pop();
+                    break;
+                } else if (c == ')' && characterStack.size() > 1) {
+                    characterStack.pop();
+                }
+                j++;
+            }
+            conditionExprs.add(argumentExpr.substring(i, j + 1));
+            // skip ", "
+            i = j + 3;
+        }
+        return conditionExprs;
     }
 
     @Override

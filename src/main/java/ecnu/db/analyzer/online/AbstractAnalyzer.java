@@ -1,5 +1,7 @@
 package ecnu.db.analyzer.online;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 import ecnu.db.analyzer.online.node.ExecutionNode;
 import ecnu.db.analyzer.online.node.NodeTypeTool;
 import ecnu.db.analyzer.online.node.NodeTypeRefFactory;
@@ -7,6 +9,7 @@ import ecnu.db.analyzer.statical.QueryAliasParser;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
+import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.sql.SQLException;
@@ -14,6 +17,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * @author wangqingshuai
@@ -45,6 +50,13 @@ public abstract class AbstractAnalyzer {
     public abstract String getDbType();
 
     /**
+     * 从operator_info里提取tableName
+     * @param operatorInfo 需要处理的operator_info
+     * @return 提取的表名
+     */
+    abstract String extractTableName(String operatorInfo);
+
+    /**
      * 查询树的解析
      *
      * @param queryPlan query解析出的查询计划，带具体的行数
@@ -63,14 +75,76 @@ public abstract class AbstractAnalyzer {
     abstract String[] analyzeJoinInfo(String joinInfo) throws TouchstoneToolChainException;
 
     /**
+     * 创建colName到对应的oprator的multimap，并返回关于where_condition的信息
+     * @param operatorInfo 需要处理的operator_info
+     * @param conditions 用于创建的multimap
+     * @return 关于whereExpr的信息
+     * @throws TouchstoneToolChainException 无法分析的部分
+     */
+    abstract WhereConditionInfo buildConditionMap(String operatorInfo, Multimap<String, String> conditions) throws TouchstoneToolChainException;
+
+    /**
      * 分析传入的select 过滤条件，传出表名和格式化后的condition
      * todo 增加对or的支持
      *
-     * @param selectCondition 传入的select条件语句
+     * @param operatorInfo 传入的select的operatorInfo
      * @return 表名和格式化后的condition
-     * @throws TouchstoneToolChainException select条件无法解析
      */
-    abstract Pair<String, String> analyzeSelectCondition(String selectCondition) throws TouchstoneToolChainException;
+    Pair<String, String> analyzeSelectCondition(String operatorInfo) throws TouchstoneToolChainException {
+        Multimap<String, String> conditionMap = ArrayListMultimap.create();
+        WhereConditionInfo ret = buildConditionMap(operatorInfo, conditionMap);
+        boolean useAlias = ret.useAlias, isOr = ret.isOr;
+        String tableName = ret.tableName;
+        if (aliasDic != null && aliasDic.containsKey(tableName)) {
+            tableName = aliasDic.get(tableName);
+        }
+        StringBuilder conditionStr = new StringBuilder();
+        for (Map.Entry<String, String> entry : conditionMap.entries()) {
+            String columnName = entry.getKey();
+            String operator = entry.getValue();
+            conditionStr.append(String.format("%s@%s#", columnName, operator));
+            String selectArgName = columnName + " " + operator;
+            if (useAlias) {
+                selectArgName = tableName + "." + selectArgName;
+            }
+            StringBuilder selectArgs = new StringBuilder();
+
+            if (operator.contains("in")) {
+                int dateOrNot = schemas.get(tableName).isDate(columnName) ? 1 : 0;
+                int inCount = Integer.parseInt(operator.split("[()]")[1]);
+                selectArgs = new StringBuilder(String.format("(%s)",
+                        IntStream.range(0, inCount)
+                                .mapToObj((i) -> String.format("'#%d,%d,%d#'", sqlArgIndex, i, dateOrNot))
+                                .collect(Collectors.joining(", "))));
+                sqlArgIndex++;
+            } else {
+                if ("bet".equals(operator)) {
+                    selectArgs.append(String.format("ween '#%d,0,%d#' and '#%d,1,%d#'",
+                            sqlArgIndex,
+                            schemas.get(tableName).isDate(columnName) ? 1 : 0,
+                            sqlArgIndex++,
+                            schemas.get(tableName).isDate(columnName) ? 1 : 0));
+                } else {
+                    selectArgs.append(String.format("#%d,0,%d#", sqlArgIndex++, schemas.get(tableName).isDate(columnName) ? 1 : 0));
+                }
+            }
+            if (argsAndIndex.containsKey(selectArgName)) {
+                argsAndIndex.get(selectArgName).add(selectArgs.toString());
+            } else {
+                List<String> value = new ArrayList<>();
+                value.add(selectArgs.toString());
+                argsAndIndex.put(selectArgName, value);
+            }
+        }
+        if (!isOr && conditionMap.size() > 1) {
+            conditionStr.append("and");
+        } else if (isOr && conditionMap.size() > 1) {
+            conditionStr.append("or");
+        }
+
+
+        return new MutablePair<>(tableName, conditionStr.toString());
+    }
 
     public List<String[]> getQueryPlan(String queryCanonicalName, String sql) throws SQLException, TouchstoneToolChainException {
         aliasDic = queryAliasParser.getTableAlias(sql, getDbType());
@@ -265,10 +339,4 @@ public abstract class AbstractAnalyzer {
         }
     }
 
-    /**
-     * 从operatorInfo里提取tableName
-     * @param operatorInfo
-     * @return
-     */
-    abstract String extractTableName(String operatorInfo);
 }
