@@ -1,7 +1,6 @@
 package ecnu.db.analyzer.online;
 
 import com.alibaba.druid.util.JdbcConstants;
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import ecnu.db.analyzer.online.node.ExecutionNode;
 import ecnu.db.analyzer.online.node.ExecutionNode.ExecutionNodeType;
@@ -9,14 +8,12 @@ import ecnu.db.analyzer.online.node.RawNode;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
 import ecnu.db.utils.TouchstoneToolChainException;
-import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static ecnu.db.utils.CommonUtils.matchPattern;
 
@@ -306,13 +303,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         return result;
     }
 
-    /**
-     * 创建colName到对应的oprator的multimap，并返回关于where_condition的信息
-     * @param operatorInfo 需要处理的operator_info
-     * @param conditions 用于创建的multimap
-     * @return 关于whereExpr的信息
-     * @throws TouchstoneToolChainException select的表名不一致
-     */
+    @Override
     WhereConditionInfo buildConditionMap(String operatorInfo, Multimap<String, String> conditions) throws TouchstoneToolChainException {
         List<String> conditionExprs = splitCondition(operatorInfo);
 
@@ -451,71 +442,6 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             i = j + 3;
         }
         return conditionExprs;
-    }
-
-
-    /**
-     * 分析传入的select 过滤条件，传出表名和格式化后的condition
-     * todo 增加对or的支持
-     *
-     * @param operatorInfo 传入的select的operatorInfo
-     * @return 表名和格式化后的condition
-     */
-    @Override
-    Pair<String, String> analyzeSelectCondition(String operatorInfo) throws TouchstoneToolChainException {
-        Multimap<String, String> conditionMap = ArrayListMultimap.create();
-        WhereConditionInfo ret = buildConditionMap(operatorInfo, conditionMap);
-        boolean useAlias = ret.useAlias, isOr = ret.isOr;
-        String tableName = ret.tableName;
-        if (aliasDic != null && aliasDic.containsKey(tableName)) {
-            tableName = aliasDic.get(tableName);
-        }
-        StringBuilder conditionStr = new StringBuilder();
-        for (Map.Entry<String, String> entry : conditionMap.entries()) {
-            String columnName = entry.getKey();
-            String operator = entry.getValue();
-            conditionStr.append(String.format("%s@%s#", columnName, operator));
-            String selectArgName = columnName + " " + operator;
-            if (useAlias) {
-                selectArgName = tableName + "." + selectArgName;
-            }
-            StringBuilder selectArgs = new StringBuilder();
-
-            if (operator.contains("in")) {
-                int dateOrNot = schemas.get(tableName).isDate(columnName) ? 1 : 0;
-                int inCount = Integer.parseInt(operator.split("[()]")[1]);
-                selectArgs = new StringBuilder(String.format("(%s)",
-                        IntStream.range(0, inCount)
-                                .mapToObj((i) -> String.format("'#%d,%d,%d#'", sqlArgIndex, i, dateOrNot))
-                                .collect(Collectors.joining(", "))));
-                sqlArgIndex++;
-            } else {
-                if ("bet".equals(operator)) {
-                    selectArgs.append(String.format("ween '#%d,0,%d#' and '#%d,1,%d#'",
-                            sqlArgIndex,
-                            schemas.get(tableName).isDate(columnName) ? 1 : 0,
-                            sqlArgIndex++,
-                            schemas.get(tableName).isDate(columnName) ? 1 : 0));
-                } else {
-                    selectArgs.append(String.format("#%d,0,%d#", sqlArgIndex++, schemas.get(tableName).isDate(columnName) ? 1 : 0));
-                }
-            }
-            if (argsAndIndex.containsKey(selectArgName)) {
-                argsAndIndex.get(selectArgName).add(selectArgs.toString());
-            } else {
-                List<String> value = new ArrayList<>();
-                value.add(selectArgs.toString());
-                argsAndIndex.put(selectArgName, value);
-            }
-        }
-        if (!isOr && conditionMap.size() > 1) {
-            conditionStr.append("and");
-        } else if (isOr && conditionMap.size() > 1) {
-            conditionStr.append("or");
-        }
-
-
-        return new MutablePair<>(tableName, conditionStr.toString());
     }
 
     @Override
