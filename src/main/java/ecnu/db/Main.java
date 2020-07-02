@@ -38,18 +38,17 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  */
 public class Main {
 
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
+
     /**
      * 模板化SQL语句
-     * @param sql 需要处理的sql语句
+     * @param sql 需要处理的SQL语句
      * @param argsAndIndex 需要替换的arguments
      * @param cannotFindArgs 找不到的arguments
      * @param conflictArgs 矛盾的arguments
-     * @return
-     * @throws TouchstoneToolChainException
+     * @return 模板化的SQL语句
+     * @throws TouchstoneToolChainException 检测不到停止的语法词
      */
-
-    private static final Logger logger = LoggerFactory.getLogger(Main.class);
-
     public static String templatizeSql(String sql, HashMap<String, List<String>> argsAndIndex, ArrayList<String> cannotFindArgs,
                                        ArrayList<String> conflictArgs) throws TouchstoneToolChainException {
         for (Map.Entry<String, List<String>> argAndIndexes : argsAndIndex.entrySet()) {
@@ -141,7 +140,8 @@ public class Main {
                 retDir = new File(systemConfig.getResultDirectory()),
                 retSqlDir = new File(systemConfig.getResultDirectory(),"sql"),
                 dumpDir = Optional.ofNullable(systemConfig.getDumpDirectory()).map(File::new).orElse(null),
-                loadDir = Optional.ofNullable(systemConfig.getLoadDirectory()).map(File::new).orElse(null);
+                loadDir = Optional.ofNullable(systemConfig.getLoadDirectory()).map(File::new).orElse(null),
+                logDir = new File(systemConfig.getResultDirectory(), "log");
         if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
         if (dumpDir != null && dumpDir.isDirectory()) FileUtils.deleteDirectory(dumpDir);
         if (retDir.isDirectory()) FileUtils.deleteDirectory(retDir);
@@ -171,8 +171,10 @@ public class Main {
             logger.info("表结构和数据分布持久化成功");
         }
 
-        AbstractAnalyzer queryAnalyzer = new TidbAnalyzer(systemConfig.getDatabaseVersion(), dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        AbstractAnalyzer queryAnalyzer = new TidbAnalyzer(systemConfig.getDatabaseVersion(), systemConfig.getSkipNodeThreshold(),
+                dbConnector, systemConfig.getTidbSelectArgs(), schemas);
         List<String> queryInfos = new LinkedList<>();
+        boolean needLog = false;
         for (File sqlFile : files) {
             if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
                 List<String> queries = ReadQuery.getSQLsFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
@@ -251,18 +253,23 @@ public class Main {
                         sqlWriter.close();
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
-                        logger.error(String.format("%-15s Status:获取失败", queryCanonicalName));
-                        e.printStackTrace();
-                        if (queryPlan != null && !queryPlan.isEmpty() && dumpDir != null) {
-                            String queryPlanFileName = String.format("%s_query_plan.txt", queryCanonicalName);
-                            File file = new File(dumpDir.getPath(), queryPlanFileName);
-                            FileUtils.writeStringToFile(file, JSON.toJSONString(queryPlan), UTF_8);
+                        logger.error(String.format("%-15s Status:获取失败", queryCanonicalName), e);
+                        needLog = true;
+                        if (queryPlan != null && !queryPlan.isEmpty()) {
+                            dumpQueryPlan(logDir, queryPlan, queryCanonicalName);
+                            logger.info(String.format("失败的query %s的查询计划已经存盘到'%s'", queryCanonicalName, logDir.getAbsolutePath()));
                         }
                     }
                 }
             }
         }
         logger.info("获取查询计划完成");
+        if (needLog) {
+            dumpMultiCol(logDir, dbConnector);
+            dumpSchemas(logDir, schemas);
+            dumpTableNames(logDir, tableNames);
+            logger.info(String.format("关于表的日志信息已经存盘到'%s'", logDir.getAbsolutePath()));
+        }
 
         if (dumpDir != null && dumpDir.isDirectory()) {
             dumpMultiCol(dumpDir, dbConnector);
