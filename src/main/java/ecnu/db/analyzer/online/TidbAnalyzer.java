@@ -393,14 +393,22 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         }
         else if (isNullOps.contains(operator)) {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
-            String[] canonicalColName = firstArgument.split("\\.");
+            List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
+            if (matches.get(0).get(2).split(", ").length != 1 || colArgument.size() != 1 || !colArgument.get(0).get(0).equals(firstArgument)) {
+                throw new TouchstoneToolChainException(String.format("不支持 '%s' 形式的filter", matches.get(0).get(0)));
+            }
+            String[] canonicalColName = colArgument.get(0).get(0).split("\\.");
             tableName = canonicalColName[1];
             colName = canonicalColName[2];
         }
         else if (inOps.contains(operator)) {
             int inSize = matches.get(0).get(2).split(", ").length - 1;
             String firstArgument = matches.get(0).get(2).split(", ")[0];
-            String[] canonicalColName = firstArgument.split("\\.");
+            List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
+            if (colArgument.isEmpty() || !colArgument.get(0).get(0).equals(firstArgument)) {
+                throw new TouchstoneToolChainException(String.format("不支持 '%s' 形式的filter", matches.get(0).get(0)));
+            }
+            String[] canonicalColName = colArgument.get(0).get(0).split("\\.");
             tableName = canonicalColName[1];
             colName = canonicalColName[2];
             operator = String.format("%s(%d)", operator, inSize);

@@ -167,7 +167,7 @@ public abstract class AbstractAnalyzer {
             try {
                 queryInfo = extractConstraintChain(path);
             } catch (TouchstoneToolChainException e) {
-                logger.error(e.getMessage(), e);
+                logger.error("提取约束链失败", e);
             }
             if (queryInfo == null) {
                 break;
@@ -248,8 +248,8 @@ public abstract class AbstractAnalyzer {
             } catch (TouchstoneToolChainException | SQLException e) {
                 // 小于设置的阈值以后略去后续的节点
                 if (node.getOutputRows() < skipNodeThreshold) {
-                    logger.error(e.getMessage(), e);
-                    logger.info(String.format("节点行数小于阈值，跳过节点%s", node));
+                    logger.error("提取约束链失败", e);
+                    logger.info(String.format("%s, 但节点行数小于阈值，跳过节点%s", e.getMessage(), node));
                     break;
                 }
                 throw e;

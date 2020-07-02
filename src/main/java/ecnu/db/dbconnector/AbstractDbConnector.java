@@ -32,11 +32,6 @@ public abstract class AbstractDbConnector implements DatabaseConnectorInterface 
         String user = config.getDatabaseUser();
         String pass = config.getDatabasePwd();
         try {
-            try {
-                Class.forName("com.mysql.cj.jdbc.Driver");
-            } catch (ClassNotFoundException e) {
-                logger.error(e.getMessage(), e);
-            }
             stmt = DriverManager.getConnection(dbUrl(config), user, pass).createStatement();
             databaseMetaData = DriverManager.getConnection(dbUrl(config), user, pass).getMetaData();
         } catch (SQLException e) {

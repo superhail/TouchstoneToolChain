@@ -140,7 +140,8 @@ public class Main {
                 retDir = new File(systemConfig.getResultDirectory()),
                 retSqlDir = new File(systemConfig.getResultDirectory(),"sql"),
                 dumpDir = Optional.ofNullable(systemConfig.getDumpDirectory()).map(File::new).orElse(null),
-                loadDir = Optional.ofNullable(systemConfig.getLoadDirectory()).map(File::new).orElse(null);
+                loadDir = Optional.ofNullable(systemConfig.getLoadDirectory()).map(File::new).orElse(null),
+                logDir = new File(systemConfig.getResultDirectory(), "log");
         if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
         if (dumpDir != null && dumpDir.isDirectory()) FileUtils.deleteDirectory(dumpDir);
         if (retDir.isDirectory()) FileUtils.deleteDirectory(retDir);
@@ -173,6 +174,7 @@ public class Main {
         AbstractAnalyzer queryAnalyzer = new TidbAnalyzer(systemConfig.getDatabaseVersion(), systemConfig.getSkipNodeThreshold(),
                 dbConnector, systemConfig.getTidbSelectArgs(), schemas);
         List<String> queryInfos = new LinkedList<>();
+        boolean needLog = false;
         for (File sqlFile : files) {
             if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
                 List<String> queries = ReadQuery.getSQLsFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
@@ -252,16 +254,22 @@ public class Main {
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
                         logger.error(String.format("%-15s Status:获取失败", queryCanonicalName), e);
-                        if (queryPlan != null && !queryPlan.isEmpty() && dumpDir != null) {
-                            String queryPlanFileName = String.format("%s_query_plan.txt", queryCanonicalName);
-                            File file = new File(dumpDir.getPath(), queryPlanFileName);
-                            FileUtils.writeStringToFile(file, JSON.toJSONString(queryPlan), UTF_8);
+                        needLog = true;
+                        if (queryPlan != null && !queryPlan.isEmpty()) {
+                            dumpQueryPlan(logDir, queryPlan, queryCanonicalName);
+                            logger.info(String.format("失败的query %s的查询计划已经存盘到'%s'", queryCanonicalName, logDir.getAbsolutePath()));
                         }
                     }
                 }
             }
         }
         logger.info("获取查询计划完成");
+        if (needLog) {
+            dumpMultiCol(logDir, dbConnector);
+            dumpSchemas(logDir, schemas);
+            dumpTableNames(logDir, tableNames);
+            logger.info(String.format("关于表的日志信息已经存盘到'%s'", logDir.getAbsolutePath()));
+        }
 
         if (dumpDir != null && dumpDir.isDirectory()) {
             dumpMultiCol(dumpDir, dbConnector);
