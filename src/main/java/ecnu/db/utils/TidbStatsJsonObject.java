@@ -6,7 +6,7 @@ import java.util.HashMap;
 
 public class TidbStatsJsonObject {
     int count;
-    HashMap<String, distribution> columns;
+    HashMap<String, Distribution> columns;
 
     public int getCount() {
         return count;
@@ -16,11 +16,11 @@ public class TidbStatsJsonObject {
         this.count = count;
     }
 
-    public HashMap<String, distribution> getColumns() {
+    public HashMap<String, Distribution> getColumns() {
         return columns;
     }
 
-    public void setColumns(HashMap<String, distribution> columns) {
+    public void setColumns(HashMap<String, Distribution> columns) {
         this.columns = columns;
     }
 
@@ -43,7 +43,7 @@ public class TidbStatsJsonObject {
     }
 }
 
-class distribution {
+class Distribution {
     int null_count;
     Histogram histogram;
     int tot_col_size;

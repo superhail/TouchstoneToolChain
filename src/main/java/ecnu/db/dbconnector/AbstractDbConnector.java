@@ -14,13 +14,12 @@ import java.util.Map;
  * 数据库驱动连接器
  */
 public abstract class AbstractDbConnector implements DatabaseConnectorInterface {
+    private final HashMap<String, Integer> multiColNdvMap = new HashMap<>();
     public DatabaseMetaData databaseMetaData;
     /**
      * JDBC 驱动名及数据库 URL
      */
     protected Statement stmt;
-
-    private final HashMap<String, Integer> multiColNdvMap = new HashMap<>();
 
     AbstractDbConnector(SystemConfig config) throws TouchstoneToolChainException {
         // 数据库的用户名与密码
@@ -44,12 +43,14 @@ public abstract class AbstractDbConnector implements DatabaseConnectorInterface 
 
     /**
      * 获取在数据库中出现的表名
+     *
      * @return 所有表名
      */
     abstract String abstractGetTableNames();
 
     abstract String abstractGetCreateTableSql(String tableName);
 
+    @Override
     public List<String> getTableNames() throws SQLException {
         ResultSet rs = stmt.executeQuery(abstractGetTableNames());
         ArrayList<String> tables = new ArrayList<>();
@@ -80,6 +81,7 @@ public abstract class AbstractDbConnector implements DatabaseConnectorInterface 
         return infos;
     }
 
+    @Override
     public List<String[]> explainQuery(String queryCanonicalName, String sql, String[] sqlInfoColumns) throws SQLException {
         ResultSet rs = stmt.executeQuery("explain analyze " + sql);
         ArrayList<String[]> result = new ArrayList<>();
@@ -93,14 +95,16 @@ public abstract class AbstractDbConnector implements DatabaseConnectorInterface 
         return result;
     }
 
+    @Override
     public int getMultiColNdv(String schema, String columns) throws SQLException {
         ResultSet rs = stmt.executeQuery("select count(distinct " + columns + ") from " + schema);
         rs.next();
-        Integer result = rs.getInt(1);
+        int result = rs.getInt(1);
         multiColNdvMap.put(String.format("%s.%s", schema, columns), result);
         return result;
     }
 
+    @Override
     public Map<String, Integer> getMultiColNdvMap() {
         return this.multiColNdvMap;
     }

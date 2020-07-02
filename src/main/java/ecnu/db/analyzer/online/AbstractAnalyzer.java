@@ -3,8 +3,8 @@ package ecnu.db.analyzer.online;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import ecnu.db.analyzer.online.node.ExecutionNode;
-import ecnu.db.analyzer.online.node.NodeTypeTool;
 import ecnu.db.analyzer.online.node.NodeTypeRefFactory;
+import ecnu.db.analyzer.online.node.NodeTypeTool;
 import ecnu.db.analyzer.statical.QueryAliasParser;
 import ecnu.db.dbconnector.DatabaseConnectorInterface;
 import ecnu.db.schema.Schema;
@@ -41,16 +41,24 @@ public abstract class AbstractAnalyzer {
         this.schemas = schemas;
     }
 
+    /**
+     * sql的查询计划中，需要使用查询计划的列名
+     * @param databaseVersion 数据库类型
+     * @return
+     * @throws TouchstoneToolChainException
+     */
     abstract String[] getSqlInfoColumns(String databaseVersion) throws TouchstoneToolChainException;
 
     /**
      * 获取数据库使用的静态解析器的数据类型
+     *
      * @return 静态解析器使用的数据库类型
      */
     public abstract String getDbType();
 
     /**
      * 从operator_info里提取tableName
+     *
      * @param operatorInfo 需要处理的operator_info
      * @return 提取的表名
      */
@@ -76,8 +84,9 @@ public abstract class AbstractAnalyzer {
 
     /**
      * 创建colName到对应的oprator的multimap，并返回关于where_condition的信息
+     *
      * @param operatorInfo 需要处理的operator_info
-     * @param conditions 用于创建的multimap
+     * @param conditions   用于创建的multimap
      * @return 关于whereExpr的信息
      * @throws TouchstoneToolChainException 无法分析的部分
      */
@@ -292,6 +301,7 @@ public abstract class AbstractAnalyzer {
 
     /**
      * 根据输入的列名统计非重复值的个数，进而给出该列是否为主键
+     *
      * @param pkTable
      * @param pkCol
      * @param fkTable

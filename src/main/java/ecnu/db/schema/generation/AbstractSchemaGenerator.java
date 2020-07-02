@@ -38,7 +38,7 @@ public abstract class AbstractSchemaGenerator {
     }
 
     private HashMap<String, AbstractColumn> getColumns(HashMap<String, String> columnNameAndTypes) throws TouchstoneToolChainException {
-        HashMap<String, AbstractColumn> columns = new HashMap<>();
+        HashMap<String, AbstractColumn> columns = new HashMap<>(columnNameAndTypes.size());
         for (Map.Entry<String, String> columnNameAndType : columnNameAndTypes.entrySet()) {
             switch (ConfigConvert.getColumnType(columnNameAndType.getValue())) {
                 case INTEGER:

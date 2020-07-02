@@ -38,10 +38,11 @@ public class Main {
 
     /**
      * 模板化SQL语句
-     * @param sql 需要处理的sql语句
-     * @param argsAndIndex 需要替换的arguments
+     *
+     * @param sql            需要处理的sql语句
+     * @param argsAndIndex   需要替换的arguments
      * @param cannotFindArgs 找不到的arguments
-     * @param conflictArgs 矛盾的arguments
+     * @param conflictArgs   矛盾的arguments
      * @return
      * @throws TouchstoneToolChainException
      */
@@ -134,13 +135,19 @@ public class Main {
 
         File resultDirectory = new File(systemConfig.getResultDirectory()),
                 retDir = new File(systemConfig.getResultDirectory()),
-                retSqlDir = new File(systemConfig.getResultDirectory(),"sql"),
+                retSqlDir = new File(systemConfig.getResultDirectory(), "sql"),
                 dumpDir = Optional.ofNullable(systemConfig.getDumpDirectory()).map(File::new).orElse(null),
                 loadDir = Optional.ofNullable(systemConfig.getLoadDirectory()).map(File::new).orElse(null);
-        if (retSqlDir.isDirectory()) FileUtils.deleteDirectory(retSqlDir);
-        if (dumpDir != null && dumpDir.isDirectory()) FileUtils.deleteDirectory(dumpDir);
-        if (retDir.isDirectory()) FileUtils.deleteDirectory(retDir);
-        if (!retSqlDir.mkdirs()){
+        if (retSqlDir.isDirectory()) {
+            FileUtils.deleteDirectory(retSqlDir);
+        }
+        if (dumpDir != null && dumpDir.isDirectory()) {
+            FileUtils.deleteDirectory(dumpDir);
+        }
+        if (retDir.isDirectory()) {
+            FileUtils.deleteDirectory(retDir);
+        }
+        if (!retSqlDir.mkdirs()) {
             throw new TouchstoneToolChainException("无法创建输出文件夹");
         }
         if (dumpDir != null && !dumpDir.mkdirs()) {
@@ -170,7 +177,7 @@ public class Main {
         List<String> queryInfos = new LinkedList<>();
         for (File sqlFile : files) {
             if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
-                List<String> queries = ReadQuery.getSQLsFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
+                List<String> queries = ReadQuery.getQueriesFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
                 int index = 0;
                 BufferedWriter sqlWriter = new BufferedWriter(new FileWriter(
                         new File(retSqlDir.getPath(), sqlFile.getName())));
@@ -325,13 +332,14 @@ public class Main {
         if (!multiColNdvFile.isFile()) {
             throw new TouchstoneToolChainException(String.format("找不到%s", multiColNdvFile.getAbsolutePath()));
         }
-        multiColNdvMap = JSON.parseObject(FileUtils.readFileToString(multiColNdvFile, UTF_8), new TypeReference<>(){});
+        multiColNdvMap = JSON.parseObject(FileUtils.readFileToString(multiColNdvFile, UTF_8), new TypeReference<>() {
+        });
         return multiColNdvMap;
     }
 
     private static Map<String, List<String[]>> loadQueryPlans(File loadDir) throws IOException {
         Map<String, List<String[]>> queryPlanMap = new HashMap<>();
-        for (File queryPlanFile: Optional.ofNullable(loadDir.listFiles((dir, name) -> name.endsWith("dump"))).orElse(new File[]{})) {
+        for (File queryPlanFile : Optional.ofNullable(loadDir.listFiles((dir, name) -> name.endsWith("dump"))).orElse(new File[]{})) {
             String content = FileUtils.readFileToString(queryPlanFile, UTF_8);
             queryPlanMap.put(queryPlanFile.getName(), Arrays.stream(content.split("\n"))
                     .map((str) -> str.split(";", -1)).collect(Collectors.toList()));
@@ -346,7 +354,8 @@ public class Main {
             if (!schemaFile.isFile()) {
                 throw new TouchstoneToolChainException(String.format("找不到%s", schemaFile.getAbsolutePath()));
             }
-            schemas = JSON.parseObject(FileUtils.readFileToString(schemaFile, UTF_8), new TypeReference<>(){});
+            schemas = JSON.parseObject(FileUtils.readFileToString(schemaFile, UTF_8), new TypeReference<>() {
+            });
             System.out.println("加载表结构和表数据分布成功");
         } else {
             for (String tableName : tableNames) {
@@ -380,7 +389,7 @@ public class Main {
             HashSet<String> tableNameSet = new HashSet<>();
             for (File sqlFile : files) {
                 if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
-                    List<String> queries = ReadQuery.getSQLsFromFile(sqlFile.getPath(), "mysql");
+                    List<String> queries = ReadQuery.getQueriesFromFile(sqlFile.getPath(), "mysql");
                     for (String sql : queries) {
                         tableNameSet.addAll(QueryTableName.getTableName(sql, "mysql"));
                     }

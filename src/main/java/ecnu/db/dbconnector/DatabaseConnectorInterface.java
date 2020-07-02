@@ -6,9 +6,15 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * @author lianxuechao
+ */
 public interface DatabaseConnectorInterface {
-    public List<String> getTableNames() throws SQLException;
-    public List<String[]> explainQuery(String queryCanonicalName, String sql, String[] sqlInfoColumns) throws SQLException, TouchstoneToolChainException;
-    public int getMultiColNdv(String schema, String columns) throws SQLException, TouchstoneToolChainException;
-    public Map<String, Integer> getMultiColNdvMap();
+    List<String> getTableNames() throws SQLException;
+
+    List<String[]> explainQuery(String queryCanonicalName, String sql, String[] sqlInfoColumns) throws SQLException, TouchstoneToolChainException;
+
+    int getMultiColNdv(String schema, String columns) throws SQLException, TouchstoneToolChainException;
+
+    Map<String, Integer> getMultiColNdvMap();
 }
