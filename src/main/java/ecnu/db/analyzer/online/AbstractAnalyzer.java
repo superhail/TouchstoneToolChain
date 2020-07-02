@@ -47,6 +47,7 @@ public abstract class AbstractAnalyzer {
 
     /**
      * sql的查询计划中，需要使用查询计划的列名
+     *
      * @param databaseVersion 数据库类型
      * @return
      * @throws TouchstoneToolChainException
@@ -98,6 +99,7 @@ public abstract class AbstractAnalyzer {
 
     /**
      * 分析传入的select 过滤条件，传出表名和格式化后的condition
+     *
      * @param operatorInfo 传入的select的operatorInfo
      * @return 表名和格式化后的condition
      */
@@ -164,6 +166,7 @@ public abstract class AbstractAnalyzer {
 
     /**
      * 获取查询树的约束链信息和表信息
+     *
      * @param root 查询树
      * @return 该查询树结构出的约束链信息和表信息
      */
@@ -171,7 +174,7 @@ public abstract class AbstractAnalyzer {
 
         List<String> queryInfos = new ArrayList<>();
         List<List<ExecutionNode>> paths = getPaths(root);
-        for (List<ExecutionNode> path: paths) {
+        for (List<ExecutionNode> path : paths) {
             QueryInfo queryInfo = null;
             try {
                 queryInfo = extractConstraintChain(path);
@@ -190,6 +193,7 @@ public abstract class AbstractAnalyzer {
 
     /**
      * 获取查询树的所有路径
+     *
      * @param root 需要处理的查询树
      * @return 按照从底部节点到顶部节点形式的所有路径
      */
@@ -201,19 +205,20 @@ public abstract class AbstractAnalyzer {
 
     /**
      * getPaths 的内部迭代方法
-     * @param root 需要处理的查询树
+     *
+     * @param root  需要处理的查询树
      * @param paths 需要返回的路径
      */
     private void getPathsIterate(ExecutionNode root, List<List<ExecutionNode>> paths) {
         if (root.leftNode != null) {
             getPathsIterate(root.leftNode, paths);
-            for (List<ExecutionNode> path: paths) {
+            for (List<ExecutionNode> path : paths) {
                 path.add(root);
             }
         }
         if (root.rightNode != null) {
             getPathsIterate(root.rightNode, paths);
-            for (List<ExecutionNode> path: paths) {
+            for (List<ExecutionNode> path : paths) {
                 path.add(root);
             }
         }
@@ -225,10 +230,11 @@ public abstract class AbstractAnalyzer {
 
     /**
      * 获取一条路径上的约束链
+     *
      * @param path 需要处理的路径
      * @return 获取的约束链
      * @throws TouchstoneToolChainException 无法处理路径
-     * @throws SQLException 无法处理路径
+     * @throws SQLException                 无法处理路径
      */
     private QueryInfo extractConstraintChain(List<ExecutionNode> path) throws TouchstoneToolChainException, SQLException {
         if (path == null || path.size() == 0) {
@@ -271,15 +277,16 @@ public abstract class AbstractAnalyzer {
 
     /**
      * 分析一个节点，提取约束链信息
-     * @param node 需要分析的节点
+     *
+     * @param node            需要分析的节点
      * @param constraintChain 约束链
-     * @param tableName 表名
+     * @param tableName       表名
      * @return 是否停止继续向上分析
      * @throws TouchstoneToolChainException 节点分析出错
-     * @throws SQLException 节点分析出错
+     * @throws SQLException                 节点分析出错
      */
     private boolean analyzeNode(ExecutionNode node, QueryInfo constraintChain, String tableName) throws TouchstoneToolChainException, SQLException {
-        if(node.getType() == ExecutionNode.ExecutionNodeType.scan) {
+        if (node.getType() == ExecutionNode.ExecutionNodeType.scan) {
             throw new TouchstoneToolChainException(String.format("中间节点'%s'不为scan", node.getId()));
         }
         if (node.getType() == ExecutionNode.ExecutionNodeType.filter) {
@@ -289,8 +296,7 @@ public abstract class AbstractAnalyzer {
                         (double) node.getOutputRows() / constraintChain.getLastNodeLineCount() + "];");
                 constraintChain.setLastNodeLineCount(node.getOutputRows());
             }
-        }
-        else if (node.getType() == ExecutionNode.ExecutionNodeType.join) {
+        } else if (node.getType() == ExecutionNode.ExecutionNodeType.join) {
             String[] joinColumnInfos = analyzeJoinInfo(node.getInfo());
             String pkTable = joinColumnInfos[0], pkCol = joinColumnInfos[1],
                     fkTable = joinColumnInfos[2], fkCol = joinColumnInfos[3];

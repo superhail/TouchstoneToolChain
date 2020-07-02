@@ -141,7 +141,8 @@ public class Main {
                 retDir = new File(systemConfig.getResultDirectory()),
                 retSqlDir = new File(systemConfig.getResultDirectory(), "sql"),
                 dumpDir = Optional.ofNullable(systemConfig.getDumpDirectory()).map(File::new).orElse(null),
-                loadDir = Optional.ofNullable(systemConfig.getLoadDirectory()).map(File::new).orElse(null);
+                loadDir = Optional.ofNullable(systemConfig.getLoadDirectory()).map(File::new).orElse(null),
+                logDir = new File(systemConfig.getResultDirectory(), "log");
         if (retSqlDir.isDirectory()) {
             FileUtils.deleteDirectory(retSqlDir);
         }
