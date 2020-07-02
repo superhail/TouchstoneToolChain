@@ -351,6 +351,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
     }
 
     /**
+     * TODO 增加对filter中多元(即有多个col)参数的支持
      * buildConditionMap的内部迭代方法
      * @param conditionExpr 需要处理的condition表达式
      * @param isOr 是否为or类型的condition
