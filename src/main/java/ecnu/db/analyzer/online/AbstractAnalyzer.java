@@ -222,9 +222,10 @@ public abstract class AbstractAnalyzer {
      * @throws SQLException 无法处理路径
      */
     private QueryInfo extractConstraintChain(List<ExecutionNode> path) throws TouchstoneToolChainException, SQLException {
-        assert path.size() > 0;
+        if (path == null || path.size() == 0) {
+            throw new TouchstoneToolChainException(String.format("非法的path输入 '%s'", path));
+        }
         ExecutionNode node = path.get(0);
-        assert node.getType() != ExecutionNode.ExecutionNodeType.join;
         QueryInfo constraintChain;
         String tableName;
         if (node.getType() == ExecutionNode.ExecutionNodeType.filter) {
@@ -238,7 +239,7 @@ public abstract class AbstractAnalyzer {
             Schema schema = schemas.get(tableName);
             constraintChain = new QueryInfo("", tableName, schema.getTableSize());
         } else {
-            throw new TouchstoneToolChainException("join节点不应该出现在最底层");
+            throw new TouchstoneToolChainException(String.format("底层节点'%s'不应该为join", node.getId()));
         }
         for (int i = 1; i < path.size(); i++) {
             node = path.get(i);
@@ -269,7 +270,9 @@ public abstract class AbstractAnalyzer {
      * @throws SQLException 节点分析出错
      */
     private boolean analyzeNode(ExecutionNode node, QueryInfo constraintChain, String tableName) throws TouchstoneToolChainException, SQLException {
-        assert node.getType() != ExecutionNode.ExecutionNodeType.scan;
+        if(node.getType() == ExecutionNode.ExecutionNodeType.scan) {
+            throw new TouchstoneToolChainException(String.format("中间节点'%s'不为scan", node.getId()));
+        }
         if (node.getType() == ExecutionNode.ExecutionNodeType.filter) {
             Pair<String, String> tableNameAndSelectCondition = analyzeSelectCondition(node.getInfo());
             if (tableName.equals(tableNameAndSelectCondition.getKey())) {

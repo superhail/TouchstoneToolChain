@@ -322,7 +322,9 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         List<String> conditionExprs = splitCondition(operatorInfo);
 
         boolean isOr = false, useAlias = false;
-        assert conditionExprs.size() > 0;
+        if (conditionExprs.size() == 0) {
+            throw new TouchstoneToolChainException(String.format("非法的condition_expr '%s'", operatorInfo));
+        }
         if (conditionExprs.size() == 1 && conditionExprs.get(0).startsWith("or(")) {
             isOr = true;
         }
@@ -361,7 +363,9 @@ public class TidbAnalyzer extends AbstractAnalyzer {
      */
     private String buildConditionMapIter(String conditionExpr, boolean isOr, Multimap<String, String> conditions) throws TouchstoneToolChainException {
         List<List<String>> matches = matchPattern(SELECT_CONDITION_EXPR, conditionExpr);
-        assert matches.size() == 1;
+        if (matches.size() != 1) {
+            throw new TouchstoneToolChainException(String.format("非法的condition_expr '%s'", conditionExpr));
+        }
         String operator = matches.get(0).get(1);
         if (conditionExpr.startsWith("not") && !"not".equals(operator)) {
             // 补上被去掉的not
@@ -379,7 +383,9 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                 throw new TouchstoneToolChainException("不支持or和and混用");
             }
             List<String> conditionExprs = splitCondition(matches.get(0).get(2));
-            assert conditionExprs.size() == 2;
+            if(conditionExprs.size() != 2) {
+                throw new TouchstoneToolChainException(String.format("非法的condition_expr '%s'", conditionExpr));
+            }
             tableName = buildConditionMapIter(conditionExprs.get(0), isOr, conditions);
             if (!tableName.equals(buildConditionMapIter(conditionExprs.get(1), isOr, conditions))) {
                 throw new TouchstoneToolChainException("select的表名不一致");
@@ -388,7 +394,9 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         }
         else if ("not".equals(operator)) {
             List<List<String>> subMatches = matchPattern(SELECT_CONDITION_EXPR, conditionExpr);
-            assert subMatches.size() == 1;
+            if(subMatches.size() != 1) {
+                throw new TouchstoneToolChainException(String.format("非法的condition_expr '%s'", conditionExpr));
+            }
             tableName = buildConditionMapIter("not " + subMatches.get(0).get(2), isOr, conditions);
             return tableName;
         }
@@ -445,7 +453,10 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                         || ("<=".equals(oriOperator) && ">=".equals(finalOperator)))
                 .collect(Collectors.toList());
         if (leftBetOperator.size() > 0) {
-            assert leftBetOperator.size() == 1;
+            if (leftBetOperator.size() != 1) {
+                throw new TouchstoneToolChainException(String.format("非法的condition_expr '%s' 包含了多个%s",
+                        conditionExpr, leftBetOperator.get(0)));
+            }
             conditions.remove(colName, leftBetOperator.get(0));
             conditions.put(colName, "bet");
         } else {
