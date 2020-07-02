@@ -400,6 +400,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             tableName = buildConditionMapIter("not " + subMatches.get(0).get(2), isOr, conditions);
             return tableName;
         }
+        // isnull, not isnull
         else if (isNullOps.contains(operator)) {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
@@ -410,6 +411,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             tableName = canonicalColName[1];
             colName = canonicalColName[2];
         }
+        // in, not in
         else if (inOps.contains(operator)) {
             int inSize = matches.get(0).get(2).split(", ").length - 1;
             String firstArgument = matches.get(0).get(2).split(", ")[0];
@@ -422,6 +424,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             colName = canonicalColName[2];
             operator = String.format("%s(%d)", operator, inSize);
         }
+        // >, <, >=, <=, <>, =
         else if (compareOps.contains(operator)) {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
@@ -432,6 +435,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             tableName = canonicalColName[1];
             colName = canonicalColName[2];
         }
+        // like, not like
         else if (likeOps.contains(operator)) {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
