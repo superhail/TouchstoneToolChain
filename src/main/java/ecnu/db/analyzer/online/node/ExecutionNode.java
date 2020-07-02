@@ -81,14 +81,6 @@ public class ExecutionNode {
         this.joinTag = joinTag;
     }
 
-    public boolean isVisited() {
-        return visited;
-    }
-
-    public void setVisited() {
-        this.visited = true;
-    }
-
     public String getInfo() {
         return info;
     }
@@ -123,6 +115,12 @@ public class ExecutionNode {
                 "id='" + id + '\'' +
                 ", visited=" + visited +
                 '}';
+    }
+
+    @Override
+    public String toString() {
+        return "ExecutionNode{" +
+                "id='" + id + '}';
     }
 
     public enum ExecutionNodeType {

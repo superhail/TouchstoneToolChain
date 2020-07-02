@@ -23,6 +23,8 @@ public abstract class AbstractSchemaGenerator {
      * @param createTableSql create table sql
      * @return 1.column info sqls 2. keys info sql, including primary key and foreign keys
      */
+
+
     abstract Pair<String[], String> getColumnSqlAndKeySql(String createTableSql);
 
     /**

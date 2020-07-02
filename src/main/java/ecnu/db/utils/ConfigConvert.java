@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.Map;
 
 public class ConfigConvert {
+
     private static HashMap<HashSet<String>, ColumnType> typeConvert;
 
     public static void setTypeConvert(HashMap<ColumnType, HashSet<String>> typeConvert) {
