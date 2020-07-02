@@ -3,7 +3,9 @@ package ecnu.db.schema.column;
 import java.math.BigDecimal;
 
 public class BoolColumn extends AbstractColumn {
-    // TODO add Bool Column
+    /**
+     * TODO add Bool Column
+     */
     private BigDecimal trueProbability;
 
     public BoolColumn(String columnName) {

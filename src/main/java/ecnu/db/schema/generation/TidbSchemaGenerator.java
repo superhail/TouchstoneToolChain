@@ -39,7 +39,7 @@ public class TidbSchemaGenerator extends AbstractSchemaGenerator {
 
     @Override
     HashMap<String, String> getColumnInfo(String[] columnSqls) {
-        HashMap<String, String> columnInfos = new HashMap<>();
+        HashMap<String, String> columnInfos = new HashMap<>(columnSqls.length);
         for (String columnSql : columnSqls) {
             String[] attributes = columnSql.trim().split(" ");
             String columnName = attributes[0];

@@ -3,29 +3,29 @@ package ecnu.db.schema.column;
 import com.alibaba.fastjson.serializer.JSONSerializer;
 import com.alibaba.fastjson.serializer.ObjectSerializer;
 
-import java.io.IOException;
 import java.lang.reflect.Type;
 
 public class ColumnSerializer implements ObjectSerializer {
     @Override
-    public void write(JSONSerializer jsonSerializer, Object object, Object filedName, Type filedType, int features) throws IOException {
+    public void write(JSONSerializer jsonSerializer, Object object, Object filedName, Type filedType, int features) {
         AbstractColumn column = (AbstractColumn) object;
         switch (column.getColumnType()) {
             case INTEGER:
-                jsonSerializer.write((IntColumn) column);
+                jsonSerializer.write(column);
                 break;
             case BOOL:
-                jsonSerializer.write((BoolColumn) column);
+                jsonSerializer.write(column);
                 break;
             case DECIMAL:
-                jsonSerializer.write((DecimalColumn) column);
+                jsonSerializer.write(column);
                 break;
             case VARCHAR:
-                jsonSerializer.write((StringColumn) column);
+                jsonSerializer.write(column);
                 break;
             case DATETIME:
-                jsonSerializer.write((DateColumn) column);
+                jsonSerializer.write(column);
                 break;
         }
     }
 }
+

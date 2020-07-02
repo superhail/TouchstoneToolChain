@@ -11,20 +11,20 @@ public class StringColumn extends AbstractColumn {
         super(columnName, ColumnType.VARCHAR);
     }
 
-    public void setAvgLength(BigDecimal avgLength) {
-        this.avgLength = avgLength;
-    }
-
-    public void setMaxLength(int maxLength) {
-        this.maxLength = maxLength;
-    }
-
     public BigDecimal getAvgLength() {
         return avgLength;
     }
 
+    public void setAvgLength(BigDecimal avgLength) {
+        this.avgLength = avgLength;
+    }
+
     public int getMaxLength() {
         return maxLength;
+    }
+
+    public void setMaxLength(int maxLength) {
+        this.maxLength = maxLength;
     }
 
     @Override

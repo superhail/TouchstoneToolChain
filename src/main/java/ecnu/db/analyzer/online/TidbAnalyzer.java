@@ -72,27 +72,27 @@ public class TidbAnalyzer extends AbstractAnalyzer {
      * 合并节点，删除query plan中不需要或者不支持的节点，并根据节点类型提取对应信息
      * 关于join下推到tikv节点的处理:
      * 1. 有selection的下推
-     *             IndexJoin                                         Filter
-     *            /       \                                          /
-     *      leftNode      IndexLookup              ===>>>          Join
-     *                     /        \                             /    \
-     *             IndexRangeScan   Selection               leftNode  Scan
-     *                             /
-     *                           Scan
-     *
+     * IndexJoin                                         Filter
+     * /       \                                          /
+     * leftNode      IndexLookup              ===>>>          Join
+     * /        \                             /    \
+     * IndexRangeScan   Selection               leftNode  Scan
+     * /
+     * Scan
+     * <p>
      * 2. 没有selection的下推(leftNode中有Selection节点)
-     *             IndexJoin                                         Join
-     *            /       \                                         /    \
-     *      leftNode      IndexLookup              ===>>>     leftNode   Scan
-     *                     /        \
-     *             IndexRangeScan   Scan
-     *
+     * IndexJoin                                         Join
+     * /       \                                         /    \
+     * leftNode      IndexLookup              ===>>>     leftNode   Scan
+     * /        \
+     * IndexRangeScan   Scan
+     * <p>
      * 3. 没有selection的下推(leftNode中没有Selection节点，但右边扫描节点上有索引)
-     *             IndexJoin                                         Join
-     *            /       \                                         /    \
-     *      leftNode      IndexReader              ===>>>     leftNode   Scan
-     *                     /
-     *             IndexRangeScan
+     * IndexJoin                                         Join
+     * /       \                                         /    \
+     * leftNode      IndexReader              ===>>>     leftNode   Scan
+     * /
+     * IndexRangeScan
      *
      * @param rawNode 需要处理的query plan树
      * @return 处理好的树
@@ -146,7 +146,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                 if (!matches.isEmpty() && nodeTypeRef.isTableScanNode(rawNode.right.nodeType)) {
                     String tableName = extractTableName(rawNode.right.operatorInfo);
                     node = new ExecutionNode(rawNode.id, ExecutionNodeType.scan, schemas.get(tableName).getTableSize(), rawNode.right.operatorInfo);
-                // 其他情况跳过左侧节点
+                    // 其他情况跳过左侧节点
                 } else {
                     node = buildExecutionTree(rawNode.right);
                 }
@@ -158,8 +158,8 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                 // 处理IndexJoin没有selection的下推到tikv情况
                 if (rawNode.left.rowCount != tableSize) {
                     node = new ExecutionNode(rawNode.left.id, ExecutionNodeType.scan, tableSize, rawNode.left.operatorInfo);
-                // 正常情况
-                } else{
+                    // 正常情况
+                } else {
                     node = new ExecutionNode(rawNode.left.id, ExecutionNodeType.scan, rawNode.left.rowCount, rawNode.left.operatorInfo);
                 }
             } else {
@@ -221,8 +221,9 @@ public class TidbAnalyzer extends AbstractAnalyzer {
 
     /**
      * 获取节点上查询计划的信息
+     *
      * @param databaseVersion 数据库版本
-     * @param data 需要处理的数据
+     * @param data            需要处理的数据
      * @return 返回plan_id, operator_info, execution_info
      * @throws TouchstoneToolChainException 不支持的版本
      */
@@ -232,7 +233,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         } else if ("4.0.0".equals(databaseVersion)) {
             String[] ret = new String[3];
             ret[0] = data[0];
-            ret[1] = data[3].isEmpty()? data[1]: String.format("%s,%s", data[3], data[1]);
+            ret[1] = data[3].isEmpty() ? data[1] : String.format("%s,%s", data[3], data[1]);
             ret[2] = "rows:" + data[2];
             return ret;
         } else {
@@ -243,6 +244,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
     /**
      * 分析join信息
      * TODO support other valid schema object names listed in https://dev.mysql.com/doc/refman/5.7/en/identifiers.html
+     *
      * @param joinInfo join字符串
      * @return 长度为4的字符串数组，0，1为join info左侧的表名和列名，2，3为join右侧的表明和列名
      * @throws TouchstoneToolChainException 无法分析的join条件
@@ -264,7 +266,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             leftTable = leftJoinInfos[1];
             rightTable = rightJoinInfos[1];
             List<String> leftCols = new ArrayList<>(), rightCols = new ArrayList<>();
-            for (List<String> match: matches) {
+            for (List<String> match : matches) {
                 leftJoinInfos = match.get(1).split("\\.");
                 rightJoinInfos = match.get(2).split("\\.");
                 String currLeftTable = leftJoinInfos[1], currLeftCol = leftJoinInfos[2], currRightTable = rightJoinInfos[1], currRightCol = rightJoinInfos[2];
@@ -329,7 +331,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             isOr = true;
         }
         String tableName = null;
-        for (String conditionExpr: conditionExprs) {
+        for (String conditionExpr : conditionExprs) {
             List<String> groups = matchPattern(SELECT_CONDITION_EXPR, conditionExpr).get(0);
             convertOperator(groups.get(1));
             String currTableName = buildConditionMapIter(groups.get(0), isOr, conditions);
@@ -339,7 +341,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                     useAlias = true;
                 }
             }
-            if(!tableName.equals(currTableName)) {
+            if (!tableName.equals(currTableName)) {
                 throw new TouchstoneToolChainException("select的表名不一致");
             }
         }
@@ -355,9 +357,10 @@ public class TidbAnalyzer extends AbstractAnalyzer {
     /**
      * TODO 增加对filter中多元(即有多个col)参数的支持
      * buildConditionMap的内部迭代方法
+     *
      * @param conditionExpr 需要处理的condition表达式
-     * @param isOr 是否为or类型的condition
-     * @param conditions 用于创建的multimap
+     * @param isOr          是否为or类型的condition
+     * @param conditions    用于创建的multimap
      * @return 表名
      * @throws TouchstoneToolChainException 不支持or和and混用, select的表名不一致
      */
@@ -383,7 +386,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                 throw new TouchstoneToolChainException("不支持or和and混用");
             }
             List<String> conditionExprs = splitCondition(matches.get(0).get(2));
-            if(conditionExprs.size() != 2) {
+            if (conditionExprs.size() != 2) {
                 throw new TouchstoneToolChainException(String.format("非法的condition_expr '%s'", conditionExpr));
             }
             tableName = buildConditionMapIter(conditionExprs.get(0), isOr, conditions);
@@ -391,10 +394,9 @@ public class TidbAnalyzer extends AbstractAnalyzer {
                 throw new TouchstoneToolChainException("select的表名不一致");
             }
             return tableName;
-        }
-        else if ("not".equals(operator)) {
+        } else if ("not".equals(operator)) {
             List<List<String>> subMatches = matchPattern(SELECT_CONDITION_EXPR, conditionExpr);
-            if(subMatches.size() != 1) {
+            if (subMatches.size() != 1) {
                 throw new TouchstoneToolChainException(String.format("非法的condition_expr '%s'", conditionExpr));
             }
             tableName = buildConditionMapIter("not " + subMatches.get(0).get(2), isOr, conditions);
@@ -445,8 +447,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             String[] canonicalColName = colArgument.get(0).get(0).split("\\.");
             tableName = canonicalColName[1];
             colName = canonicalColName[2];
-        }
-        else {
+        } else {
             throw new TouchstoneToolChainException(String.format("不支持的filter操作符%s", operator));
         }
 
@@ -472,6 +473,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
 
     /**
      * 把一个condition_expr的参数部分分割成一个个小的condition_expr
+     *
      * @param argumentExpr condition_expr的参数部分
      * @return 分割好的condition_expr
      */
@@ -479,8 +481,8 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         Deque<Character> characterStack = new ArrayDeque<>();
         List<String> conditionExprs = new LinkedList<>();
         int i = 0, j = 0;
-        while(i < argumentExpr.length()) {
-            while(j < argumentExpr.length()) {
+        while (i < argumentExpr.length()) {
+            while (j < argumentExpr.length()) {
                 char c = argumentExpr.charAt(j);
                 if (c == '(') {
                     characterStack.push(c);
