@@ -28,15 +28,20 @@ public class TidbAnalyzer extends AbstractAnalyzer {
     private static final Pattern INNER_JOIN_INNER_KEY = Pattern.compile("inner key:.*");
     private static final Pattern JOIN_EQ_OPERATOR = Pattern.compile("equal:\\[.*]");
     private static final Pattern PLAN_ID = Pattern.compile("([a-zA-Z]+_[0-9]+)");
-    private static final Pattern EQ_OPERATOR = Pattern.compile("eq\\(([a-zA-Z0-9_$.]+), ([a-zA-Z0-9_$.]+)\\)");
+    private static final Pattern EQ_OPERATOR = Pattern.compile("eq\\(([a-zA-Z0-9_$]+\\.[a-zA-Z0-9_$]+\\.[a-zA-Z0-9_$]+), ([a-zA-Z0-9_$]+\\.[a-zA-Z0-9_$]+\\.[a-zA-Z0-9_$]+)\\)");
     private static final Pattern SELECT_CONDITION_EXPR = Pattern.compile("([a-z_0-9]+)\\((.+)\\)");
     private static final Pattern INNER_JOIN = Pattern.compile("inner join");
+    private static final Pattern COL_ARGUMENT = Pattern.compile("[a-zA-Z0-9_$]+\\.[a-zA-Z0-9_$]+\\.[a-zA-Z0-9_$]+");
+    private static final Set<String> compareOps = new HashSet<>(Arrays.asList(">", "<", ">=", "<=", "<>", "="));
+    private static final Set<String> likeOps = new HashSet<>(Arrays.asList("like", "not like"));
+    private static final Set<String> inOps = new HashSet<>(Arrays.asList("in", "not in"));
+    private static final Set<String> isNullOps = new HashSet<>(Arrays.asList("isnull", "not isnull"));
     HashMap<String, String> tidbSelectArgs;
 
 
-    public TidbAnalyzer(String databaseVersion, DatabaseConnectorInterface dbConnector, HashMap<String, String> tidbSelectArgs,
+    public TidbAnalyzer(String databaseVersion, Integer skipNodeThreshold, DatabaseConnectorInterface dbConnector, HashMap<String, String> tidbSelectArgs,
                         HashMap<String, Schema> schemas) {
-        super(databaseVersion, dbConnector, schemas);
+        super(databaseVersion, skipNodeThreshold, dbConnector, schemas);
         this.tidbSelectArgs = tidbSelectArgs;
     }
 
@@ -214,6 +219,13 @@ public class TidbAnalyzer extends AbstractAnalyzer {
         return rawNodeRoot;
     }
 
+    /**
+     * 获取节点上查询计划的信息
+     * @param databaseVersion 数据库版本
+     * @param data 需要处理的数据
+     * @return 返回plan_id, operator_info, execution_info
+     * @throws TouchstoneToolChainException 不支持的版本
+     */
     private String[] extractSubQueryPlanInfo(String databaseVersion, String[] data) throws TouchstoneToolChainException {
         if ("3.1.0".equals(databaseVersion)) {
             return data;
@@ -379,13 +391,13 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             tableName = buildConditionMapIter("not " + subMatches.get(0).get(2), isOr, conditions);
             return tableName;
         }
-        else if ("not isnull".equals(operator) || "isnull".equals(operator)) {
+        else if (isNullOps.contains(operator)) {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             String[] canonicalColName = firstArgument.split("\\.");
             tableName = canonicalColName[1];
             colName = canonicalColName[2];
         }
-        else if ("not in".equals(operator) || "in".equals(operator)) {
+        else if (inOps.contains(operator)) {
             int inSize = matches.get(0).get(2).split(", ").length - 1;
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             String[] canonicalColName = firstArgument.split("\\.");
@@ -393,11 +405,28 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             colName = canonicalColName[2];
             operator = String.format("%s(%d)", operator, inSize);
         }
-        else {
+        else if (compareOps.contains(operator)) {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
-            String[] canonicalColName = firstArgument.split("\\.");
+            List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
+            if (matches.get(0).get(2).split(", ").length != 2 || colArgument.size() != 1 || !colArgument.get(0).get(0).equals(firstArgument)) {
+                throw new TouchstoneToolChainException(String.format("不支持 '%s' 形式的filter", matches.get(0).get(0)));
+            }
+            String[] canonicalColName = colArgument.get(0).get(0).split("\\.");
             tableName = canonicalColName[1];
             colName = canonicalColName[2];
+        }
+        else if (likeOps.contains(operator)) {
+            String firstArgument = matches.get(0).get(2).split(", ")[0];
+            List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
+            if (matches.get(0).get(2).split(", ").length != 3 || colArgument.size() != 1 || !colArgument.get(0).get(0).equals(firstArgument)) {
+                throw new TouchstoneToolChainException(String.format("不支持 '%s' 形式的filter", matches.get(0).get(0)));
+            }
+            String[] canonicalColName = colArgument.get(0).get(0).split("\\.");
+            tableName = canonicalColName[1];
+            colName = canonicalColName[2];
+        }
+        else {
+            throw new TouchstoneToolChainException(String.format("不支持的filter操作符%s", operator));
         }
 
         Collection<String> oriOperators = conditions.get(colName);

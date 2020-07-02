@@ -25,7 +25,6 @@ public class IntColumn extends AbstractColumn {
         return max;
     }
 
-    // TODO
     @Override
     public int getNdv() {
         return this.ndv;

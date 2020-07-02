@@ -38,18 +38,17 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  */
 public class Main {
 
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
+
     /**
      * 模板化SQL语句
-     * @param sql 需要处理的sql语句
+     * @param sql 需要处理的SQL语句
      * @param argsAndIndex 需要替换的arguments
      * @param cannotFindArgs 找不到的arguments
      * @param conflictArgs 矛盾的arguments
-     * @return
-     * @throws TouchstoneToolChainException
+     * @return 模板化的SQL语句
+     * @throws TouchstoneToolChainException 检测不到停止的语法词
      */
-
-    private static final Logger logger = LoggerFactory.getLogger(Main.class);
-
     public static String templatizeSql(String sql, HashMap<String, List<String>> argsAndIndex, ArrayList<String> cannotFindArgs,
                                        ArrayList<String> conflictArgs) throws TouchstoneToolChainException {
         for (Map.Entry<String, List<String>> argAndIndexes : argsAndIndex.entrySet()) {
@@ -171,7 +170,8 @@ public class Main {
             logger.info("表结构和数据分布持久化成功");
         }
 
-        AbstractAnalyzer queryAnalyzer = new TidbAnalyzer(systemConfig.getDatabaseVersion(), dbConnector, systemConfig.getTidbSelectArgs(), schemas);
+        AbstractAnalyzer queryAnalyzer = new TidbAnalyzer(systemConfig.getDatabaseVersion(), systemConfig.getSkipNodeThreshold(),
+                dbConnector, systemConfig.getTidbSelectArgs(), schemas);
         List<String> queryInfos = new LinkedList<>();
         for (File sqlFile : files) {
             if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
@@ -251,8 +251,7 @@ public class Main {
                         sqlWriter.close();
                     } catch (TouchstoneToolChainException e) {
                         queryAnalyzer.outputSuccess(false);
-                        logger.error(String.format("%-15s Status:获取失败", queryCanonicalName));
-                        e.printStackTrace();
+                        logger.error(String.format("%-15s Status:获取失败", queryCanonicalName), e);
                         if (queryPlan != null && !queryPlan.isEmpty() && dumpDir != null) {
                             String queryPlanFileName = String.format("%s_query_plan.txt", queryCanonicalName);
                             File file = new File(dumpDir.getPath(), queryPlanFileName);
