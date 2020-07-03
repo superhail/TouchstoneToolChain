@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +18,8 @@ import java.util.Map;
 public abstract class AbstractDbConnector implements DatabaseConnectorInterface {
 
     private final static Logger logger = LoggerFactory.getLogger(AbstractDbConnector.class);
+
+    private final HashMap<String, Integer> multiColNdvMap = new HashMap<>();
 
     public DatabaseMetaData databaseMetaData;
     /**
