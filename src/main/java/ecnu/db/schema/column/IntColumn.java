@@ -1,5 +1,8 @@
 package ecnu.db.schema.column;
 
+/**
+ * @author qingshuai.wang
+ */
 public class IntColumn extends AbstractColumn {
     private int min;
     private int max;

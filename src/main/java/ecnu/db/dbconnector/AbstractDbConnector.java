@@ -39,6 +39,11 @@ public abstract class AbstractDbConnector implements DatabaseConnectorInterface 
         }
     }
 
+    /**
+     * 获取数据库连接的URL
+     * @param config 配置信息
+     * @return 数据库连接的URL
+     */
     abstract String dbUrl(SystemConfig config);
 
     /**
@@ -48,6 +53,11 @@ public abstract class AbstractDbConnector implements DatabaseConnectorInterface 
      */
     abstract String abstractGetTableNames();
 
+    /**
+     * 获取数据库表DDL所需要使用的SQL
+     * @param tableName 需要获取的表名
+     * @return SQL
+     */
     abstract String abstractGetCreateTableSql(String tableName);
 
     @Override

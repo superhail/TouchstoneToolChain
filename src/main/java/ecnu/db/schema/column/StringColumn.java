@@ -2,6 +2,9 @@ package ecnu.db.schema.column;
 
 import java.math.BigDecimal;
 
+/**
+ * @author qingshuai.wang
+ */
 public class StringColumn extends AbstractColumn {
     private BigDecimal avgLength;
     private int maxLength;

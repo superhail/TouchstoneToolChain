@@ -25,14 +25,14 @@ public class TidbStatsJsonObject {
     }
 
     public float getNullProbability(String name) {
-        return (float) columns.get(name).null_count / count;
+        return (float) columns.get(name).nullCount / count;
     }
 
     public BigDecimal getAvgLength(String name) {
         if (count == 0) {
             return new BigDecimal(0);
         }
-        BigDecimal totalSize = BigDecimal.valueOf(columns.get(name).tot_col_size);
+        BigDecimal totalSize = BigDecimal.valueOf(columns.get(name).totalColSize);
         BigDecimal tableSize = BigDecimal.valueOf(count);
         return totalSize.divide(tableSize, 4, RoundingMode.HALF_UP).subtract(BigDecimal.valueOf(2));
     }
@@ -44,16 +44,16 @@ public class TidbStatsJsonObject {
 }
 
 class Distribution {
-    int null_count;
+    int nullCount;
     Histogram histogram;
-    int tot_col_size;
+    int totalColSize;
 
-    public int getTot_col_size() {
-        return tot_col_size;
+    public int getTotalColSize() {
+        return totalColSize;
     }
 
-    public void setTot_col_size(int tot_col_size) {
-        this.tot_col_size = tot_col_size;
+    public void setTotalColSize(int totalColSize) {
+        this.totalColSize = totalColSize;
     }
 
     public Histogram getHistogram() {
@@ -64,12 +64,12 @@ class Distribution {
         this.histogram = histogram;
     }
 
-    public int getNull_count() {
-        return null_count;
+    public int getNullCount() {
+        return nullCount;
     }
 
-    public void setNull_count(int null_count) {
-        this.null_count = null_count;
+    public void setNullCount(int nullCount) {
+        this.nullCount = nullCount;
     }
 }
 

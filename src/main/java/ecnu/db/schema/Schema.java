@@ -14,6 +14,7 @@ import java.util.*;
  * @author wangqingshuai
  */
 public class Schema {
+    private final static int INIT_HASHMAP_SIZE = 16;
     private String tableName;
     private HashMap<String, AbstractColumn> columns;
     private int tableSize;
@@ -79,7 +80,7 @@ public class Schema {
 
         for (Map.Entry<String, Schema> entry : schemas.entrySet()) {
             Schema schema = entry.getValue();
-            HashMap<String, String> fks = Optional.ofNullable(schema.getForeignKeys()).orElse(new HashMap<>());
+            HashMap<String, String> fks = Optional.ofNullable(schema.getForeignKeys()).orElse(new HashMap<>(INIT_HASHMAP_SIZE));
             schema.setMetaDataFks(fks);
         }
     }
