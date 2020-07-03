@@ -1,5 +1,7 @@
 package ecnu.db.utils;
 
+import com.alibaba.fastjson.annotation.JSONField;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.HashMap;
@@ -47,8 +49,10 @@ public class TidbStatsJsonObject {
 }
 
 class Distribution {
+    @JSONField(name = "null_count")
     int nullCount;
     Histogram histogram;
+    @JSONField(name = "tot_col_size")
     int totalColSize;
 
     public int getTotalColSize() {
