@@ -112,14 +112,6 @@ public class ExecutionNode {
     @Override
     public String toString() {
         return "ExecutionNode{" +
-                "id='" + id + '\'' +
-                ", visited=" + visited +
-                '}';
-    }
-
-    @Override
-    public String toString() {
-        return "ExecutionNode{" +
                 "id='" + id + '}';
     }
 
