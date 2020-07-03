@@ -40,6 +40,10 @@ public class Main {
 
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
+    private static final String DUMP_FILE_POSTFIX = "dump";
+
+    private static final int INIT_HASHMAP_SIZE = 16;
+
     /**
      * 模板化SQL语句
      *
@@ -115,7 +119,7 @@ public class Main {
                         if (argAndIndexes.getKey().contains(" bet")) {
                             sql = sql.substring(0, front) + argAndIndexes.getValue().get(0) + backString.toString();
                         } else {
-                            sql = sql.substring(0, front + 1) + "'" + argAndIndexes.getValue().get(0) + "'" + backString.toString();
+                            sql = String.format("%s'%s'%s", sql.substring(0, front + 1), argAndIndexes.getValue().get(0), backString.toString());
                         }
 
                     } else {
@@ -214,7 +218,7 @@ public class Main {
                                         get(cannotFindArg).get(0).split(" ");
                                 indexInfos[1] = indexInfos[1].replace("'", "");
                                 indexInfos[3] = indexInfos[3].replace("'", "");
-                                HashMap<String, List<String>> tempInfo = new HashMap<>();
+                                HashMap<String, List<String>> tempInfo = new HashMap<>(INIT_HASHMAP_SIZE);
                                 tempInfo.put(cannotFindArg.split(" ")[0] + " >=", Collections.singletonList(indexInfos[1]));
                                 ArrayList<String> tempList = new ArrayList<>();
                                 sql = templatizeSql(sql, tempInfo, tempList, new ArrayList<>());
@@ -350,8 +354,8 @@ public class Main {
     }
 
     private static Map<String, List<String[]>> loadQueryPlans(File loadDir) throws IOException {
-        Map<String, List<String[]>> queryPlanMap = new HashMap<>();
-        for (File queryPlanFile : Optional.ofNullable(loadDir.listFiles((dir, name) -> name.endsWith("dump"))).orElse(new File[]{})) {
+        Map<String, List<String[]>> queryPlanMap = new HashMap<>(INIT_HASHMAP_SIZE);
+        for (File queryPlanFile : Optional.ofNullable(loadDir.listFiles((dir, name) -> name.endsWith(DUMP_FILE_POSTFIX))).orElse(new File[]{})) {
             String content = FileUtils.readFileToString(queryPlanFile, UTF_8);
             queryPlanMap.put(queryPlanFile.getName(), Arrays.stream(content.split("\n"))
                     .map((str) -> str.split(";", -1)).collect(Collectors.toList()));

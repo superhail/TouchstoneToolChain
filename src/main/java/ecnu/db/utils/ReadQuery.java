@@ -9,6 +9,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * @author qingshuai.wang
+ */
 public class ReadQuery {
     public static List<String> getQueriesFromFile(String file, String dbType) throws IOException {
         BufferedReader reader = new BufferedReader(new FileReader(file));

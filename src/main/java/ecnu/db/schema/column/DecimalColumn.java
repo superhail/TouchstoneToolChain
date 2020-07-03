@@ -1,5 +1,8 @@
 package ecnu.db.schema.column;
 
+/**
+ * @author qingshuai.wang
+ */
 public class DecimalColumn extends AbstractColumn {
     double min;
     double max;

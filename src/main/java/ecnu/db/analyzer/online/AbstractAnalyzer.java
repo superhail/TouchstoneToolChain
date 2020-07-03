@@ -270,7 +270,9 @@ public abstract class AbstractAnalyzer {
                 }
                 throw e;
             }
-            if (isStop) break;
+            if (isStop) {
+                break;
+            }
         }
         return constraintChain;
     }

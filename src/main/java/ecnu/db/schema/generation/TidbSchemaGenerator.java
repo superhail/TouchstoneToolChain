@@ -22,11 +22,11 @@ public class TidbSchemaGenerator extends AbstractSchemaGenerator {
 
 
     @Override
-    Pair<String[], String> getColumnSqlAndKeySql(String createTableSql) {
-        createTableSql = createTableSql.toLowerCase();
-        createTableSql = createTableSql.substring(createTableSql.indexOf("\n") + 1, createTableSql.lastIndexOf(")"));
-        createTableSql = createTableSql.replaceAll("`", "");
-        String[] sqls = createTableSql.split("\n");
+    Pair<String[], String> getColumnSqlAndKeySql(String tableDDL) {
+        tableDDL = tableDDL.toLowerCase();
+        tableDDL = tableDDL.substring(tableDDL.indexOf("\n") + 1, tableDDL.lastIndexOf(")"));
+        tableDDL = tableDDL.replaceAll("`", "");
+        String[] sqls = tableDDL.split("\n");
         int index = sqls.length - 1;
         for (; index >= 0; index--) {
             if (!sqls[index].contains("key ")) {

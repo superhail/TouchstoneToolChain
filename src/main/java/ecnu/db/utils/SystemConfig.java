@@ -9,6 +9,9 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 
+/**
+ * @author qingshuai.wang
+ */
 public class SystemConfig {
 
     private String databaseIp;

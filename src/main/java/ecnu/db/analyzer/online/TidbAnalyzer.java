@@ -32,10 +32,12 @@ public class TidbAnalyzer extends AbstractAnalyzer {
     private static final Pattern SELECT_CONDITION_EXPR = Pattern.compile("([a-z_0-9]+)\\((.+)\\)");
     private static final Pattern INNER_JOIN = Pattern.compile("inner join");
     private static final Pattern COL_ARGUMENT = Pattern.compile("[a-zA-Z0-9_$]+\\.[a-zA-Z0-9_$]+\\.[a-zA-Z0-9_$]+");
-    private static final Set<String> compareOps = new HashSet<>(Arrays.asList(">", "<", ">=", "<=", "<>", "="));
-    private static final Set<String> likeOps = new HashSet<>(Arrays.asList("like", "not like"));
-    private static final Set<String> inOps = new HashSet<>(Arrays.asList("in", "not in"));
-    private static final Set<String> isNullOps = new HashSet<>(Arrays.asList("isnull", "not isnull"));
+    private static final Set<String> COMPARE_OP_SET = new HashSet<>(Arrays.asList(">", "<", ">=", "<=", "<>", "="));
+    private static final Set<String> LIKE_OP_SET = new HashSet<>(Arrays.asList("like", "not like"));
+    private static final Set<String> IN_OP_SET = new HashSet<>(Arrays.asList("in", "not in"));
+    private static final Set<String> ISNULL_OP_SET = new HashSet<>(Arrays.asList("isnull", "not isnull"));
+    private static final String TIDB_VERSION3 = "3.1.0";
+    private static final String TIDB_VERSION4 = "4.0.0";
     HashMap<String, String> tidbSelectArgs;
 
 
@@ -47,9 +49,9 @@ public class TidbAnalyzer extends AbstractAnalyzer {
 
     @Override
     String[] getSqlInfoColumns(String databaseVersion) throws TouchstoneToolChainException {
-        if ("3.1.0".equals(databaseVersion)) {
+        if (TIDB_VERSION3.equals(databaseVersion)) {
             return new String[]{"id", "operator info", "execution info"};
-        } else if ("4.0.0".equals(databaseVersion)) {
+        } else if (TIDB_VERSION4.equals(databaseVersion)) {
             return new String[]{"id", "operator info", "actRows", "access object"};
         } else {
             throw new TouchstoneToolChainException(String.format("unsupported tidb version %s", databaseVersion));
@@ -72,26 +74,26 @@ public class TidbAnalyzer extends AbstractAnalyzer {
      * 合并节点，删除query plan中不需要或者不支持的节点，并根据节点类型提取对应信息
      * 关于join下推到tikv节点的处理:
      * 1. 有selection的下推
-     * IndexJoin                                         Filter
-     * /       \                                          /
-     * leftNode      IndexLookup              ===>>>          Join
-     * /        \                             /    \
-     * IndexRangeScan   Selection               leftNode  Scan
-     * /
+     *                IndexJoin                                         Filter
+     *                /       \                                          /
+     *         leftNode      IndexLookup              ===>>>          Join
+     *            /              \                                    /   \
+     *    IndexRangeScan     Selection                          leftNode  Scan
+     *     /
      * Scan
      * <p>
      * 2. 没有selection的下推(leftNode中有Selection节点)
-     * IndexJoin                                         Join
-     * /       \                                         /    \
-     * leftNode      IndexLookup              ===>>>     leftNode   Scan
-     * /        \
+     *                IndexJoin                                         Join
+     *               /       \                                         /    \
+     *         leftNode      IndexLookup              ===>>>     leftNode   Scan
+     *        /        \
      * IndexRangeScan   Scan
      * <p>
      * 3. 没有selection的下推(leftNode中没有Selection节点，但右边扫描节点上有索引)
-     * IndexJoin                                         Join
-     * /       \                                         /    \
-     * leftNode      IndexReader              ===>>>     leftNode   Scan
-     * /
+     *               IndexJoin                                         Join
+     *              /       \                                         /    \
+     *        leftNode      IndexReader              ===>>>     leftNode   Scan
+     *        /
      * IndexRangeScan
      *
      * @param rawNode 需要处理的query plan树
@@ -228,9 +230,9 @@ public class TidbAnalyzer extends AbstractAnalyzer {
      * @throws TouchstoneToolChainException 不支持的版本
      */
     private String[] extractSubQueryPlanInfo(String databaseVersion, String[] data) throws TouchstoneToolChainException {
-        if ("3.1.0".equals(databaseVersion)) {
+        if (TIDB_VERSION3.equals(databaseVersion)) {
             return data;
-        } else if ("4.0.0".equals(databaseVersion)) {
+        } else if (TIDB_VERSION4.equals(databaseVersion)) {
             String[] ret = new String[3];
             ret[0] = data[0];
             ret[1] = data[3].isEmpty() ? data[1] : String.format("%s,%s", data[3], data[1]);
@@ -403,7 +405,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             return tableName;
         }
         // isnull, not isnull
-        else if (isNullOps.contains(operator)) {
+        else if (ISNULL_OP_SET.contains(operator)) {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
             if (matches.get(0).get(2).split(", ").length != 1 || colArgument.size() != 1 || !colArgument.get(0).get(0).equals(firstArgument)) {
@@ -414,7 +416,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             colName = canonicalColName[2];
         }
         // in, not in
-        else if (inOps.contains(operator)) {
+        else if (IN_OP_SET.contains(operator)) {
             int inSize = matches.get(0).get(2).split(", ").length - 1;
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
@@ -427,7 +429,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             operator = String.format("%s(%d)", operator, inSize);
         }
         // >, <, >=, <=, <>, =
-        else if (compareOps.contains(operator)) {
+        else if (COMPARE_OP_SET.contains(operator)) {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
             if (matches.get(0).get(2).split(", ").length != 2 || colArgument.size() != 1 || !colArgument.get(0).get(0).equals(firstArgument)) {
@@ -438,7 +440,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             colName = canonicalColName[2];
         }
         // like, not like
-        else if (likeOps.contains(operator)) {
+        else if (LIKE_OP_SET.contains(operator)) {
             String firstArgument = matches.get(0).get(2).split(", ")[0];
             List<List<String>> colArgument = matchPattern(COL_ARGUMENT, matches.get(0).get(2));
             if (matches.get(0).get(2).split(", ").length != 3 || colArgument.size() != 1 || !colArgument.get(0).get(0).equals(firstArgument)) {
