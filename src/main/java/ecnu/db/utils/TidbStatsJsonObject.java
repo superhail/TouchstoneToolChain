@@ -4,6 +4,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.HashMap;
 
+/**
+ * @author qingshuai.wang
+ */
 public class TidbStatsJsonObject {
     int count;
     HashMap<String, Distribution> columns;
