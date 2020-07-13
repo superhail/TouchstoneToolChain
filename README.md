@@ -126,7 +126,7 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
     "resultDirectory": "touchstoneconf",
     "loadDirectory": "load",
     "dumpDirectory": "dump",
-    "skipNodeThreshold": 2000,
+    "skipNodeThreshold": 0.01,
     "typeConvert": {
         "INTEGER": [
             "int"
@@ -173,7 +173,7 @@ java -jar ./target/TouchstoneToolchain-${version}.jar CONFIG_PATH/config.conf
   2. 结果输出文件夹路径，程序会向指定路径输出touchstone的配置文件和模版化的sql。
   3. 持久化和加载文件夹路径，若没有dumpDirectory选项，就不会持久化；若没有loadDirectory选项，就不会加载
 
-+ 容忍分析阈值。低于该阈值的节点在出错的情况下，会跳过该节点
++ 容忍分析阈值。行数与tableSize比值低于该阈值的节点在出错的情况下，会跳过该节点及其上的节点
 
 + 类型转化配置
 
