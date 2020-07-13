@@ -177,10 +177,6 @@ public class Main {
         logger.info("开始获取表结构和数据分布");
         HashMap<String, Schema> schemas = getSchemas(loadDir, dbConnector, dbSchemaGenerator, tableNames);
         logger.info("获取表结构和数据分布成功，开始获取query查询计划");
-        if (dumpDir != null && dumpDir.isDirectory()) {
-            dumpSchemas(dumpDir, schemas);
-            logger.info("表结构和数据分布持久化成功");
-        }
 
         AbstractAnalyzer queryAnalyzer = new TidbAnalyzer(systemConfig.getDatabaseVersion(), systemConfig.getSkipNodeThreshold(),
                 dbConnector, systemConfig.getTidbSelectArgs(), schemas);
@@ -275,6 +271,10 @@ public class Main {
             }
         }
         logger.info("获取查询计划完成");
+        if (dumpDir != null && dumpDir.isDirectory()) {
+            dumpSchemas(dumpDir, schemas);
+            logger.info("表结构和数据分布持久化成功");
+        }
         if (needLog) {
             dumpMultiCol(logDir, dbConnector);
             dumpSchemas(logDir, schemas);
@@ -333,6 +333,10 @@ public class Main {
 
     private static void dumpSchemas(File dumpDir, HashMap<String, Schema> schemas) throws IOException {
         File schemaFile = new File(dumpDir, "schemas");
+        for (Schema schema: schemas.values()) {
+            schema.setJoinTag(1);
+            schema.setJoinTag(1);
+        }
         FileUtils.writeStringToFile(schemaFile, JSON.toJSONString(schemas, true), UTF_8);
     }
 
