@@ -34,7 +34,12 @@ public class QueryAliasParser {
         @Override
         public boolean visit(SQLExprTableSource x) {
             if (x.getAlias() != null) {
-                aliasMap.put(x.getAlias().toLowerCase(), x.getName().toString().toLowerCase());
+                String tableName = x.getName().toString().toLowerCase();
+                if (tableName.contains(".")) {
+                    String[] splits = tableName.split("\\.");
+                    tableName = splits[splits.length - 1];
+                }
+                aliasMap.put(x.getAlias().toLowerCase(), tableName);
             }
             return true;
         }

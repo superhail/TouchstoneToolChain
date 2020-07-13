@@ -190,10 +190,10 @@ public class Main {
             if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
                 List<String> queries = ReadQuery.getQueriesFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
                 int index = 0;
-                BufferedWriter sqlWriter = new BufferedWriter(new FileWriter(
-                        new File(retSqlDir.getPath(), sqlFile.getName())));
                 List<String[]> queryPlan = new ArrayList<>();
                 for (String sql : queries) {
+                    BufferedWriter sqlWriter = new BufferedWriter(new FileWriter(
+                            new File(retSqlDir.getPath(), sqlFile.getName())));
                     index++;
                     String queryCanonicalName = String.format("%s_%d", sqlFile.getName(), index);
                     try {

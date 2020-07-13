@@ -29,7 +29,7 @@ public class SystemConfig {
     private String dumpDirectory;
     private HashMap<ColumnType, HashSet<String>> typeConvert;
     private HashMap<String, String> tidbSelectArgs;
-    private Integer skipNodeThreshold;
+    private Double skipNodeThreshold;
 
     public SystemConfig() {
         databaseIp = "127.0.0.1";
@@ -175,11 +175,11 @@ public class SystemConfig {
         this.databaseVersion = databaseVersion;
     }
 
-    public Integer getSkipNodeThreshold() {
+    public Double getSkipNodeThreshold() {
         return skipNodeThreshold;
     }
 
-    public void setSkipNodeThreshold(Integer skipNodeThreshold) {
+    public void setSkipNodeThreshold(Double skipNodeThreshold) {
         this.skipNodeThreshold = skipNodeThreshold;
     }
 }

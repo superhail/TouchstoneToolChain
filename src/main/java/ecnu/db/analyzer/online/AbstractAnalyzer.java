@@ -35,9 +35,9 @@ public abstract class AbstractAnalyzer {
     protected HashMap<String, List<String>> argsAndIndex = new HashMap<>();
     protected NodeTypeTool nodeTypeRef;
     protected String databaseVersion;
-    protected Integer skipNodeThreshold;
+    protected Double skipNodeThreshold;
 
-    AbstractAnalyzer(String databaseVersion, Integer skipNodeThreshold, DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) {
+    AbstractAnalyzer(String databaseVersion, Double skipNodeThreshold, DatabaseConnectorInterface dbConnector, HashMap<String, Schema> schemas) {
         this.nodeTypeRef = NodeTypeRefFactory.getNodeTypeRef(databaseVersion);
         this.databaseVersion = databaseVersion;
         this.dbConnector = dbConnector;
@@ -263,9 +263,9 @@ public abstract class AbstractAnalyzer {
                 isStop = analyzeNode(node, constraintChain, tableName);
             } catch (TouchstoneToolChainException | SQLException e) {
                 // 小于设置的阈值以后略去后续的节点
-                if (node.getOutputRows() < skipNodeThreshold) {
+                if (node.getOutputRows() * 1.0 / schemas.get(tableName).getTableSize() < skipNodeThreshold) {
                     logger.error("提取约束链失败", e);
-                    logger.info(String.format("%s, 但节点行数小于阈值，跳过节点%s", e.getMessage(), node));
+                    logger.info(String.format("%s, 但节点行数与tableSize比值小于阈值，跳过节点%s", e.getMessage(), node));
                     break;
                 }
                 throw e;

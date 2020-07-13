@@ -41,7 +41,7 @@ public class TidbAnalyzer extends AbstractAnalyzer {
     HashMap<String, String> tidbSelectArgs;
 
 
-    public TidbAnalyzer(String databaseVersion, Integer skipNodeThreshold, DatabaseConnectorInterface dbConnector, HashMap<String, String> tidbSelectArgs,
+    public TidbAnalyzer(String databaseVersion, Double skipNodeThreshold, DatabaseConnectorInterface dbConnector, HashMap<String, String> tidbSelectArgs,
                         HashMap<String, Schema> schemas) {
         super(databaseVersion, skipNodeThreshold, dbConnector, schemas);
         this.tidbSelectArgs = tidbSelectArgs;
@@ -123,9 +123,6 @@ public class TidbAnalyzer extends AbstractAnalyzer {
             node.leftNode = rawNode.left == null ? null : buildExecutionTree(rawNode.left);
             node.rightNode = rawNode.right == null ? null : buildExecutionTree(rawNode.right);
         } else if (nodeTypeRef.isJoinNode(nodeType)) {
-            if (matchPattern(INNER_JOIN, rawNode.operatorInfo).isEmpty()) {
-                throw new TouchstoneToolChainException(String.format("不支持的join类型, operatorInfo{%s}", rawNode.operatorInfo));
-            }
             // 处理IndexJoin有selection的下推到tikv情况
             if (nodeTypeRef.isReaderNode(rawNode.right.nodeType)
                     && rawNode.right.right != null
@@ -255,6 +252,9 @@ public class TidbAnalyzer extends AbstractAnalyzer {
     public String[] analyzeJoinInfo(String joinInfo) throws TouchstoneToolChainException {
         if (joinInfo.contains("other cond:")) {
             throw new TouchstoneToolChainException("join中包含其他条件,暂不支持");
+        }
+        if (matchPattern(INNER_JOIN, joinInfo).isEmpty()) {
+            throw new TouchstoneToolChainException(String.format("不支持的join类型, operatorInfo{%s}", joinInfo));
         }
         String[] result = new String[4];
         String leftTable, leftCol, rightTable, rightCol;
