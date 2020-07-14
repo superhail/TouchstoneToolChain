@@ -336,7 +336,7 @@ public class Main {
         File schemaFile = new File(dumpDir, "schemas");
         for (Schema schema: schemas.values()) {
             schema.setJoinTag(1);
-            schema.setJoinTag(1);
+            schema.setLastJoinTag(1);
         }
         FileUtils.writeStringToFile(schemaFile, JSON.toJSONString(schemas, true), UTF_8);
     }
