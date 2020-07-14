@@ -4,6 +4,10 @@ package ecnu.db;
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvException;
 import ecnu.db.analyzer.online.AbstractAnalyzer;
 import ecnu.db.analyzer.online.TidbAnalyzer;
 import ecnu.db.analyzer.online.node.ExecutionNode;
@@ -22,10 +26,7 @@ import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -177,10 +178,6 @@ public class Main {
         logger.info("开始获取表结构和数据分布");
         HashMap<String, Schema> schemas = getSchemas(loadDir, dbConnector, dbSchemaGenerator, tableNames);
         logger.info("获取表结构和数据分布成功，开始获取query查询计划");
-        if (dumpDir != null && dumpDir.isDirectory()) {
-            dumpSchemas(dumpDir, schemas);
-            logger.info("表结构和数据分布持久化成功");
-        }
 
         AbstractAnalyzer queryAnalyzer = new TidbAnalyzer(systemConfig.getDatabaseVersion(), systemConfig.getSkipNodeThreshold(),
                 dbConnector, systemConfig.getTidbSelectArgs(), schemas);
@@ -190,10 +187,10 @@ public class Main {
             if (sqlFile.isFile() && sqlFile.getName().endsWith(".sql")) {
                 List<String> queries = ReadQuery.getQueriesFromFile(sqlFile.getPath(), queryAnalyzer.getDbType());
                 int index = 0;
-                BufferedWriter sqlWriter = new BufferedWriter(new FileWriter(
-                        new File(retSqlDir.getPath(), sqlFile.getName())));
                 List<String[]> queryPlan = new ArrayList<>();
                 for (String sql : queries) {
+                    BufferedWriter sqlWriter = new BufferedWriter(new FileWriter(
+                            new File(retSqlDir.getPath(), sqlFile.getName())));
                     index++;
                     String queryCanonicalName = String.format("%s_%d", sqlFile.getName(), index);
                     try {
@@ -275,6 +272,10 @@ public class Main {
             }
         }
         logger.info("获取查询计划完成");
+        if (dumpDir != null && dumpDir.isDirectory()) {
+            dumpSchemas(dumpDir, schemas);
+            logger.info("表结构和数据分布持久化成功");
+        }
         if (needLog) {
             dumpMultiCol(logDir, dbConnector);
             dumpSchemas(logDir, schemas);
@@ -306,7 +307,7 @@ public class Main {
         ccWriter.close();
     }
 
-    private static DatabaseConnectorInterface getDatabaseConnector(SystemConfig systemConfig, File loadDir) throws TouchstoneToolChainException, IOException {
+    private static DatabaseConnectorInterface getDatabaseConnector(SystemConfig systemConfig, File loadDir) throws TouchstoneToolChainException, IOException, CsvException {
         DatabaseConnectorInterface dbConnector;
         if (loadDir != null && loadDir.isDirectory()) {
             List<String> tableNames = loadTableNames(loadDir);
@@ -333,6 +334,10 @@ public class Main {
 
     private static void dumpSchemas(File dumpDir, HashMap<String, Schema> schemas) throws IOException {
         File schemaFile = new File(dumpDir, "schemas");
+        for (Schema schema: schemas.values()) {
+            schema.setJoinTag(1);
+            schema.setLastJoinTag(1);
+        }
         FileUtils.writeStringToFile(schemaFile, JSON.toJSONString(schemas, true), UTF_8);
     }
 
@@ -353,12 +358,15 @@ public class Main {
         return multiColNdvMap;
     }
 
-    private static Map<String, List<String[]>> loadQueryPlans(File loadDir) throws IOException {
+    private static Map<String, List<String[]>> loadQueryPlans(File loadDir) throws IOException, CsvException {
         Map<String, List<String[]>> queryPlanMap = new HashMap<>(INIT_HASHMAP_SIZE);
         for (File queryPlanFile : Optional.ofNullable(loadDir.listFiles((dir, name) -> name.endsWith(DUMP_FILE_POSTFIX))).orElse(new File[]{})) {
             String content = FileUtils.readFileToString(queryPlanFile, UTF_8);
-            queryPlanMap.put(queryPlanFile.getName(), Arrays.stream(content.split("\n"))
-                    .map((str) -> str.split(";", -1)).collect(Collectors.toList()));
+            CSVReader csvReader = new CSVReaderBuilder(new StringReader(content))
+                                        .withCSVParser(new CSVParserBuilder().withSeparator(';').build())
+                                        .build();
+            List<String[]> list = csvReader.readAll();
+            queryPlanMap.put(queryPlanFile.getName(), list);
         }
         return queryPlanMap;
     }

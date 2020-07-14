@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * @author xuechao.lian
  */
 public class CommonUtils {
-    private static final HashSet<String> WHERE_DELIMITERS = new HashSet<>(Arrays.asList("and", "limit", "group", ")", "or", "order", "||", "&&"));
+    private static final HashSet<String> WHERE_DELIMITERS = new HashSet<>(Arrays.asList("and", "limit", "group", ")", "or", "order", "||", "&&", "left", "right", "outer", "inner", "natural", "join", "straight_join", "cross"));
 
     /**
      * 获取正则表达式的匹配
